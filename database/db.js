@@ -5,6 +5,8 @@ const isLocal = process.env.USE_LOCAL_DB === "true";
 const dbUri = isLocal ? process.env.DB_URI_LOCAL : process.env.DB_URI;
 
 const client = new MongoClient(dbUri, {
+    maxPoolSize: 10,
+    minPoolSize: 2,
     tlsAllowInvalidCertificates: true,
     serverApi: {
       version: ServerApiVersion.v1,
