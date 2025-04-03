@@ -24,8 +24,10 @@ async function migrate() {
         await up(db, client); 
 
         console.log("Migrations applied successfully!");
+        process.exit(0);
     } catch (error) {
         console.error("Error during migration:", error);
+        process.exit(1);
     }
 }
 
