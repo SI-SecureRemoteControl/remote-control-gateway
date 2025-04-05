@@ -2,56 +2,101 @@ const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const cors = require("cors");
+const dotenv = require('dotenv');
+dotenv.config();
 
+const { connectDB } = require("./database/db");
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
-const clients = new Map(); // Store connected devices/admins
+async function startServer() {
+    // Wait for DB connection before proceeding
+    const db = await connectDB();
+    const devicesCollection = db.collection('devices');
+    const collections = await db.listCollections().toArray(); //IZBRISATI POSLIJE
+    console.log("Collections in the database:");
+    collections.forEach(collection => console.log(collection.name));
 
-wss.on("connection", (ws) => {
-    console.log("New client connected");
+    const server = http.createServer(app);
+    const wss = new WebSocket.Server({ server });
 
-    ws.on("message", (message) => {
-        const data = JSON.parse(message);
+    const clients = new Map(); // Store connected devices/admins
 
-        switch (data.type) {
-            case "register": // Device registration
-                clients.set(data.deviceId, ws);
-                console.log(`Device ${data.deviceId} registered.`);
-                break;
+    wss.on("connection", (ws) => {
+        console.log("New client connected");
 
-            case "status": // Heartbeat (online/offline)
-                console.log(`Device ${data.deviceId} is ${data.status}`);
-                break;
+        ws.on("message", async (message) => {
+            const data = JSON.parse(message);
 
-            case "signal": // WebRTC signaling (offer, answer, ICE)
-                const target = clients.get(data.to);
-                if (target) {
-                    target.send(JSON.stringify({ type: "signal", from: data.from, payload: data.payload }));
-                }
-                break;
+            switch (data.type) {
+                case "register": // Device registration
+                    clients.set(data.deviceId, ws);
 
-            case "disconnect":
-                clients.delete(data.deviceId);
-                console.log(`Device ${data.deviceId} disconnected.`);
-                break;
-        }
+                    // Update the device status to "active" in the database
+                    await devicesCollection.findOneAndUpdate(  
+                        { deviceId: data.deviceId },
+                        {
+                            $set: {
+                                status: "active",
+                                lastActiveTime: new Date()
+                            }
+                        },
+                        {
+                            returnDocument: 'after' 
+                        }
+                    );
+
+                    console.log(`Device ${data.deviceId} registered.`);
+                    break;
+
+                case "status": // Heartbeat (online/offline)
+                    console.log(`Device ${data.deviceId} is ${data.status}`);
+                    break;
+
+                case "signal": // WebRTC signaling (offer, answer, ICE)
+                    const target = clients.get(data.to);
+                    if (target) {
+                        target.send(JSON.stringify({ type: "signal", from: data.from, payload: data.payload }));
+                    }
+                    break;
+
+                case "disconnect":
+                    await devicesCollection.findOneAndUpdate(
+                        { deviceId: data.deviceId },
+                        {
+                            $set: {
+                                status: "inactive",
+                                lastActiveTime: new Date() 
+                            }
+                        },
+                        { returnDocument: 'after' } 
+                    );
+                    clients.delete(data.deviceId);
+                    console.log(`Device ${data.deviceId} disconnected.`);
+                    break;
+            }
+        });
+
+        ws.on("close", () => {
+            console.log("Client disconnected");
+        });
     });
 
-    ws.on("close", () => {
-        console.log("Client disconnected");
+    // Status endpoint to check server status
+    app.get("/status", (req, res) => {
+        res.json({ status: "Remote Control Gateway is running", connectedClients: clients.size });
     });
-});
 
-app.get("/status", (req, res) => {
-    res.json({ status: "Remote Control Gateway is running", connectedClients: clients.size });
-});
+    const PORT = process.env.PORT || 8080;
+    server.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+}
 
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+// Start the server with DB connection
+startServer().catch((err) => {
+    console.error("Error starting server:", err);
+    process.exit(1); // Exit the process if there is an error
 });
