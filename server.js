@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const heartbeatTimeout = 60 * 1000; // threshold for inactivity manje vrijednosti zbog testiranja
+const HEARTBEAT_TIMEOUT = 60 * 1000;
 const heartbeatCheckInterval = 30 * 1000; //  how often to check for inactive devices
 
 
