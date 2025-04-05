@@ -13,7 +13,7 @@ module.exports = {
 
     const newSchema = JSON.parse(JSON.stringify(currentValidator.$jsonSchema));
 
-    newSchema.properties["deregistration_key"] = {
+    newSchema.properties["deregistrationKey"] = {
       bsonType: "string",
       description: "Key used for deregistering the device"
     };
@@ -23,6 +23,6 @@ module.exports = {
       validator: { $jsonSchema: newSchema }
     });
 
-    console.log("✅ Successfully added 'deregistration_key' to schema.");
+    console.log("✅ Successfully added 'deregistrationKey' to schema.");
   },
 };
