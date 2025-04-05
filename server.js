@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 const HEARTBEAT_TIMEOUT = 60 * 1000;
-const heartbeatCheckInterval = 30 * 1000; //  how often to check for inactive devices
+const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
 
 async function startServer() {
