@@ -10,6 +10,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const heartbeatTimeout = 60 * 1000; // threshold for inactivity manje vrijednosti zbog testiranja
+const heartbeatCheckInterval = 30 * 1000; //  how often to check for inactive devices
+
 
 async function startServer() {
     // Wait for DB connection before proceeding
@@ -23,6 +26,7 @@ async function startServer() {
     const wss = new WebSocket.Server({ server });
 
     const clients = new Map(); // Store connected devices/admins
+    const lastHeartbeat = new Map(); //---2.task
 
     wss.on("connection", (ws) => {
         console.log("New client connected");
@@ -33,9 +37,9 @@ async function startServer() {
             switch (data.type) {
                 case "register": // Device registration
                     clients.set(data.deviceId, ws);
-
+                    lastHeartbeat.set(data.deviceId, new Date());
                     // Update the device status to "active" in the database
-                    await devicesCollection.findOneAndUpdate(  
+                    await devicesCollection.findOneAndUpdate(
                         { deviceId: data.deviceId },
                         {
                             $set: {
@@ -44,7 +48,7 @@ async function startServer() {
                             }
                         },
                         {
-                            returnDocument: 'after' 
+                            returnDocument: 'after'
                         }
                     );
 
@@ -53,6 +57,7 @@ async function startServer() {
 
                 case "status": // Heartbeat (online/offline)
                     console.log(`Device ${data.deviceId} is ${data.status}`);
+                    lastHeartbeat.set(data.deviceId, new Date()); // --2.task
                     break;
 
                 case "signal": // WebRTC signaling (offer, answer, ICE)
@@ -68,10 +73,10 @@ async function startServer() {
                         {
                             $set: {
                                 status: "inactive",
-                                lastActiveTime: new Date() 
+                                lastActiveTime: new Date()
                             }
                         },
-                        { returnDocument: 'after' } 
+                        { returnDocument: 'after' }
                     );
                     clients.delete(data.deviceId);
                     console.log(`Device ${data.deviceId} disconnected.`);
@@ -84,6 +89,49 @@ async function startServer() {
         });
     });
 
+
+    // Periodically check for devices that are inactive for too long
+    setInterval(() => {
+        const now = new Date();
+
+        const checkInactiveDevices = async () => {
+            for (const [deviceId, ws] of clients.entries()) {
+                const lastSeen = lastHeartbeat.get(deviceId);
+
+                if (lastSeen) {
+                    console.log(`Device ${deviceId} last heartbeat received at ${lastSeen}`);
+                } else {
+                    console.log(`No heartbeat received for device ${deviceId}`);
+                }
+
+                if (!lastSeen || now - lastSeen > heartbeatTimeout) {
+                    console.log(`Device ${deviceId} marked as inactive due to missing heartbeat.`);
+
+                    // Mark the device as inactive in the database
+                    await devicesCollection.findOneAndUpdate(
+                        { deviceId },
+                        {
+                            $set: {
+                                status: "inactive",
+                                lastActiveTime: now
+                            }
+                        }
+                    );
+
+                    clients.delete(deviceId); // Remove from connected clients
+                    lastHeartbeat.delete(deviceId); // Remove from heartbeat map
+                    try {
+                        ws.close(); // Close socket connection if still open
+                    } catch (err) {
+                        console.warn(`Error closing socket for ${deviceId}:`, err.message);
+                    }
+                }
+            }
+        };
+
+        checkInactiveDevices();
+    }, heartbeatCheckInterval);
+
     // Status endpoint to check server status
     app.get("/status", (req, res) => {
         res.json({ status: "Remote Control Gateway is running", connectedClients: clients.size });
@@ -91,11 +139,9 @@ async function startServer() {
 
     app.get("/devices/active", async (req, res) => {
         try {
-            const db = await connectDB();
-            const devicesCollection = db.collection('devices');
-            
+
             const activeDevices = await devicesCollection.find({ status: "active" }).toArray();
-           
+
             res.json(activeDevices);
         } catch (error) {
             console.error("Error fetching active devices:", error);
