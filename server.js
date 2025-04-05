@@ -89,6 +89,20 @@ async function startServer() {
         res.json({ status: "Remote Control Gateway is running", connectedClients: clients.size });
     });
 
+    app.get("/devices/active", async (req, res) => {
+        try {
+            const db = await connectDB();
+            const devicesCollection = db.collection('devices');
+            
+            const activeDevices = await devicesCollection.find({ status: "active" }).toArray();
+           
+            res.json(activeDevices);
+        } catch (error) {
+            console.error("Error fetching active devices:", error);
+            res.status(500).json({ error: "Failed to fetch active devices" });
+        }
+    });
+
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);
