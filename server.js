@@ -49,6 +49,11 @@ async function startServer() {
                         return;
                     }
 
+                    if (!registrationKeyInstance) {
+                        ws.send(JSON.stringify({ type: "error", message: `Device with registrationKey ${registrationKey} not found.` }));
+                        return;
+                    }
+
                     // Create device data with mandatory fields
                     const deviceData = {
                         deviceId,
