@@ -36,28 +36,75 @@ async function startServer() {
 
             switch (data.type) {
                 case "register": // Device registration
-                    clients.set(data.deviceId, ws);
-                    lastHeartbeat.set(data.deviceId, new Date());
+                    const { deviceId, registrationKey, name} = data;
+                
+                    // Validate request payload
+                    if (!deviceId || !registrationKey || !name) {
+                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, registrationKey, name" }));
+                        return;
+                    }
+                
+                    // Check if the device is already registered
+                    const existingDevice = await devicesCollection.findOne({ deviceId });
+                    if (existingDevice) {
+                        ws.send(JSON.stringify({ type: "error", message: `Device with ID ${deviceId} is already registered.` }));
+                        return;
+                    }
+                
+                    // Store device details in the database
+                    await devicesCollection.insertOne({
+                        deviceId,
+                        registrationKey,
+                        name,
+                        status: "active",
+                        lastActiveTime: new Date(),
+                    });
+                
+                    // Add device to the clients map
+                    clients.set(deviceId, ws);
+                    lastHeartbeat.set(deviceId, new Date());
+                
                     // Update the device status to "active" in the database
                     await devicesCollection.findOneAndUpdate(
-                        { deviceId: data.deviceId },
+                        { deviceId },
                         {
                             $set: {
                                 status: "active",
-                                lastActiveTime: new Date()
-                            }
+                                lastActiveTime: new Date(),
+                            },
                         },
                         {
-                            returnDocument: 'after'
+                            returnDocument: 'after',
                         }
                     );
-
-                    console.log(`Device ${data.deviceId} registered.`);
+                
+                    console.log(`Device ${deviceId} registered.`);
+                    ws.send(JSON.stringify({ type: "success", message: `Device ${deviceId} registered successfully.` }));
                     break;
 
                 case "status": // Heartbeat (online/offline)
                     console.log(`Device ${data.deviceId} is ${data.status}`);
                     lastHeartbeat.set(data.deviceId, new Date()); // --2.task
+
+                    /*
+                    Ahmed komentar:
+                        Zar ne bi ovdje trebalo azurirati bazu, tako da se unutar nje azurira status na active kako bi se
+                        uredjaj prikazao zajedno sa ostalim active uredjajima na endpointu /devices/active?
+                        To cu i dodati ovdje odmah ispod, ako mislite da ne treba ovako, javite.
+                    */
+
+                    await devicesCollection.findOneAndUpdate(
+                        { 
+                            deviceId: data.deviceId,
+                        },
+                        {
+                            $set: {
+                                status: data.status,
+                                lastActiveTime: new Date()
+                            }
+                        },
+                        { returnDocument: 'after' }
+                    );
                     break;
 
                 case "signal": // WebRTC signaling (offer, answer, ICE)
