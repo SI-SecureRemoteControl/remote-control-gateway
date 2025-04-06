@@ -33,24 +33,25 @@ async function startServer() {
 
             switch (data.type) {
                 case "register": // Device registration
-                    const { deviceId, registrationKey} = data;
+                    const { deviceId, registrationKey } = data;
                 
                     // Validate request payload
                     if (!deviceId || !registrationKey) {
-                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, registrationKey" }));
+                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
                         return;
                     }
                 
-                    // Check if the device is already registered
-                    const existingDevice = await devicesCollection.findOne({ deviceId });
-                    const registrationKeyInstance = await devicesCollection.findOne({ registrationKey: registrationKey });
-                    if (existingDevice) {
-                        ws.send(JSON.stringify({ type: "error", message: `Device with ID ${deviceId} is already registered.` }));
+                    // Find device using this registrationKey
+                    const existingDevice = await devicesCollection.findOne({ registrationKey });
+                    if (!existingDevice) {
+                        // If that device doesn't exist in DB, given registrationKey is invalid
+                        ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
                         return;
                     }
 
-                    if (!registrationKeyInstance) {
-                        ws.send(JSON.stringify({ type: "error", message: `Device with registrationKey ${registrationKey} not found.` }));
+                    // If the registrationKey is used by another device, prevent hijack (switching devices)
+                    if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
+                        ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
                         return;
                     }
 
@@ -82,7 +83,7 @@ async function startServer() {
                     );
                 
                     console.log(`Device ${deviceId} registered.`);
-                    ws.send(JSON.stringify({ type: "success", message: `Device ${deviceId} registered successfully.` }));
+                    ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.` }));
                     break;
 
                     case "deregister": // Device deregistration
@@ -95,11 +96,9 @@ async function startServer() {
                     // Check if the device exists
                     const device = await devicesCollection.findOne({ deviceId: data.deviceId });
                     if (!device) {
-                        ws.send(JSON.stringify({ type: "error", message: `Device with ID ${data.deviceId} not found.` }));
+                        ws.send(JSON.stringify({ type: "error", message: `Device not found.` }));
                         return;
                     }
-
-                    console.log(`\n\ndevice.deregistrationKey: ${device.deregistrationKey} \n\n\ndata.deregistrationKey: ${data.deregistrationKey}`);
                 
                     // Validate the deregistration key
                     if (device.deregistrationKey !== data.deregistrationKey) {
@@ -117,7 +116,7 @@ async function startServer() {
                     console.log(`Device ${data.deviceId} deregistered and removed from database.`);
 
                     // Send success message
-                    ws.send(JSON.stringify({ type: "success", message: `Device ${data.deviceId} deregistered successfully and removed from database.` }));
+                    ws.send(JSON.stringify({ type: "success", message: `Device deregistered successfully and removed from database.` }));
                     break; 
 
                     case "status":
