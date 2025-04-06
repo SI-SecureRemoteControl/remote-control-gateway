@@ -50,16 +50,24 @@ async function startServer() {
                         ws.send(JSON.stringify({ type: "error", message: `Device with ID ${deviceId} is already registered.` }));
                         return;
                     }
-                
-                    // Store device details in the database
-                    await devicesCollection.insertOne({
+
+                    // Create device data with mandatory fields
+                    const deviceData = {
                         deviceId,
                         registrationKey,
                         name,
                         status: "active",
                         lastActiveTime: new Date(),
+                    };
+                    
+                    // Add optional fields dynamically
+                    ["model", "osVersion", "networkType", "ipAddress", "deregistrationKey"].forEach(field => {
+                        if (data[field]) deviceData[field] = data[field];
                     });
-                
+
+                    // Store device data in the database
+                    await devicesCollection.insertOne(deviceData);
+
                     // Add device to the clients map
                     clients.set(deviceId, ws);
                     lastHeartbeat.set(deviceId, new Date());
@@ -81,6 +89,41 @@ async function startServer() {
                     console.log(`Device ${deviceId} registered.`);
                     ws.send(JSON.stringify({ type: "success", message: `Device ${deviceId} registered successfully.` }));
                     break;
+
+                    case "deregister": // Device deregistration
+                    // Validate request payload
+                    if (!data.deviceId || !data.deregistrationKey) {
+                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, deregistrationKey" }));
+                        return;
+                    }
+                
+                    // Check if the device exists
+                    const device = await devicesCollection.findOne({ deviceId: data.deviceId });
+                    if (!device) {
+                        ws.send(JSON.stringify({ type: "error", message: `Device with ID ${data.deviceId} not found.` }));
+                        return;
+                    }
+
+                    console.log(`\n\ndevice.deregistrationKey: ${device.deregistrationKey} \n\n\ndata.deregistrationKey: ${data.deregistrationKey}`);
+                
+                    // Validate the deregistration key
+                    if (device.deregistrationKey !== data.deregistrationKey) {
+                        ws.send(JSON.stringify({ type: "error", message: "Invalid deregistration key." }));
+                        return;
+                    }
+                
+                    // Remove the device from the database
+                    await devicesCollection.deleteOne({ deviceId: data.deviceId });
+
+                    // Disconnect the device by closing the WebSocket connection
+                    clients.delete(data.deviceId); // Remove from connected clients
+                    ws.close(); // Close the WebSocket connection for this device
+
+                    console.log(`Device ${data.deviceId} deregistered and removed from database.`);
+
+                    // Send success message
+                    ws.send(JSON.stringify({ type: "success", message: `Device ${data.deviceId} deregistered successfully and removed from database.` }));
+                    break; 
 
                 case "status": // Heartbeat (online/offline)
                     console.log(`Device ${data.deviceId} is ${data.status}`);
@@ -193,6 +236,46 @@ async function startServer() {
         } catch (error) {
             console.error("Error fetching active devices:", error);
             res.status(500).json({ error: "Failed to fetch active devices" });
+        }
+    });
+
+    // Deregister device
+    app.post("/devices/deregister", async (req, res) => {
+        const { deviceId, deregistrationKey } = req.body;
+
+        // Validate request payload
+        if (!deviceId || !deregistrationKey) {
+            return res.status(400).json({ error: "Missing required fields: deviceId, deregistrationKey" });
+        }
+
+        try {
+            // Check if the device exists
+            const device = await devicesCollection.findOne({ deviceId });
+            if (!device) {
+                return res.status(404).json({ error: `Device with ID ${deviceId} not found.` });
+            }
+
+            // Validate the deregistration key
+            if (device.deregistrationKey !== deregistrationKey) {
+                return res.status(400).json({ error: "Invalid deregistration key." });
+            }
+
+            // Remove the device from the database
+            await devicesCollection.deleteOne({ deviceId });
+
+            // Optionally remove the device from the WebSocket clients map and disconnect if needed
+            if (clients.has(deviceId)) {
+                const ws = clients.get(deviceId);
+                ws.close();
+                clients.delete(deviceId); // Remove from connected clients
+            }
+
+            console.log(`Device ${deviceId} deregistered and removed from database.`);
+            res.status(200).json({ message: `Device ${deviceId} deregistered successfully and removed from the database.` });
+
+        } catch (error) {
+            console.error("Error during device deregistration:", error);
+            res.status(500).json({ error: "Internal server error. Please try again later." });
         }
     });
 
