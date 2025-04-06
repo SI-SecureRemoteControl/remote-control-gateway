@@ -104,7 +104,7 @@ async function startServer() {
                     console.log(`No heartbeat received for device ${deviceId}`);
                 }
 
-                if (!lastSeen || now - lastSeen > heartbeatTimeout) {
+                if (!lastSeen || now - lastSeen > HEARTBEAT_TIMEOUT ) {
                     console.log(`Device ${deviceId} marked as inactive due to missing heartbeat.`);
 
                     // Mark the device as inactive in the database
