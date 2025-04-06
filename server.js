@@ -43,7 +43,8 @@ async function startServer() {
                 
                     // Check if the device is already registered
                     const existingDevice = await devicesCollection.findOne({ deviceId });
-                    if (existingDevice) {
+                    const registrationKeyInstance = await devicesCollection.findOne({ registrationKey });
+                    if (existingDevice || !registrationKeyInstance) {
                         ws.send(JSON.stringify({ type: "error", message: `Device with ID ${deviceId} is already registered.` }));
                         return;
                     }
