@@ -10,8 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HEARTBEAT_TIMEOUT = 60 * 1000;
-const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
+const HEARTBEAT_TIMEOUT =  5 * 60 * 1000;
+const HEARTBEAT_CHECK_INTERVAL = 60 * 1000;
 
 
 async function startServer() {
