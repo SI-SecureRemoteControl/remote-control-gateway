@@ -57,7 +57,6 @@ async function startServer() {
                     // Create device data with mandatory fields
                     const deviceData = {
                         deviceId,
-                        registrationKey,
                         status: "active",
                         lastActiveTime: new Date(),
                     };
@@ -67,21 +66,15 @@ async function startServer() {
                         if (data[field]) deviceData[field] = data[field];
                     });
 
-                    // Store device data in the database
-                    await devicesCollection.insertOne(deviceData);
-
                     // Add device to the clients map
                     clients.set(deviceId, ws);
                     lastHeartbeat.set(deviceId, new Date());
                 
                     // Update the device status to "active" in the database
                     await devicesCollection.findOneAndUpdate(
-                        { deviceId },
+                        { registrationKey },
                         {
-                            $set: {
-                                status: "active",
-                                lastActiveTime: new Date(),
-                            },
+                            $set: deviceData
                         },
                         {
                             returnDocument: 'after',
