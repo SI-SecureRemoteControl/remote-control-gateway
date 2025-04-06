@@ -18,9 +18,6 @@ async function startServer() {
     // Wait for DB connection before proceeding
     const db = await connectDB();
     const devicesCollection = db.collection('devices');
-    const collections = await db.listCollections().toArray(); //IZBRISATI POSLIJE
-    console.log("Collections in the database:");
-    collections.forEach(collection => console.log(collection.name));
 
     const server = http.createServer(app);
     const wss = new WebSocket.Server({ server });
@@ -36,11 +33,11 @@ async function startServer() {
 
             switch (data.type) {
                 case "register": // Device registration
-                    const { deviceId, registrationKey, name} = data;
+                    const { deviceId, registrationKey} = data;
                 
                     // Validate request payload
-                    if (!deviceId || !registrationKey || !name) {
-                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, registrationKey, name" }));
+                    if (!deviceId || !registrationKey) {
+                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, registrationKey" }));
                         return;
                     }
                 
@@ -55,7 +52,6 @@ async function startServer() {
                     const deviceData = {
                         deviceId,
                         registrationKey,
-                        name,
                         status: "active",
                         lastActiveTime: new Date(),
                     };
