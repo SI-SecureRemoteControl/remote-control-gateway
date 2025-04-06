@@ -130,7 +130,7 @@ async function startServer() {
         };
 
         checkInactiveDevices();
-    }, heartbeatCheckInterval);
+    }, HEARTBEAT_CHECK_INTERVAL );
 
     // Status endpoint to check server status
     app.get("/status", (req, res) => {
