@@ -125,30 +125,27 @@ async function startServer() {
                     ws.send(JSON.stringify({ type: "success", message: `Device ${data.deviceId} deregistered successfully and removed from database.` }));
                     break; 
 
-                case "status": // Heartbeat (online/offline)
-                    console.log(`Device ${data.deviceId} is ${data.status}`);
-                    lastHeartbeat.set(data.deviceId, new Date()); // --2.task
-
-                    /*
-                    Ahmed komentar:
-                        Zar ne bi ovdje trebalo azurirati bazu, tako da se unutar nje azurira status na active kako bi se
-                        uredjaj prikazao zajedno sa ostalim active uredjajima na endpointu /devices/active?
-                        To cu i dodati ovdje odmah ispod, ako mislite da ne treba ovako, javite.
-                    */
-
-                    await devicesCollection.findOneAndUpdate(
-                        { 
-                            deviceId: data.deviceId,
-                        },
-                        {
-                            $set: {
-                                status: data.status,
-                                lastActiveTime: new Date()
-                            }
-                        },
-                        { returnDocument: 'after' }
-                    );
-                    break;
+                    case "status":
+                        console.log(`Device ${data.deviceId} is ${data.status}`);
+                        lastHeartbeat.set(data.deviceId, new Date());
+                    
+                        // Ensure device is in clients map
+                        if (!clients.has(data.deviceId)) {
+                            clients.set(data.deviceId, ws);
+                        }
+                    
+                        await devicesCollection.findOneAndUpdate(
+                            { deviceId: data.deviceId },
+                            {
+                                $set: {
+                                    status: data.status,
+                                    lastActiveTime: new Date()
+                                }
+                            },
+                            { returnDocument: 'after' }
+                        );
+                        break;
+                    
 
                 case "signal": // WebRTC signaling (offer, answer, ICE)
                     const target = clients.get(data.to);
