@@ -4,6 +4,10 @@ const WebSocket = require("ws");
 const cors = require("cors");
 const dotenv = require('dotenv');
 dotenv.config();
+const jwt = require("jsonwebtoken");
+const { verifySessionToken } = require("./utils/authSession");
+
+const approvedSessions = new Map(); 
 
 const { connectDB } = require("./database/db");
 const app = express();
@@ -81,9 +85,12 @@ async function startServer() {
                             returnDocument: 'after',
                         }
                     );
+
+                    const token = jwt.sign({ deviceId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
                 
                     console.log(`Device ${deviceId} registered.`);
-                    ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.` }));
+                    ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.` , token}));
                     break;
 
                     case "deregister": // Device deregistration
@@ -141,10 +148,18 @@ async function startServer() {
                         break;
                     
 
-                case "signal": // WebRTC signaling (offer, answer, ICE)
-                    const target = clients.get(data.to);
+                case "signal":
+                    const { from: senderId, to: receiverId, payload } = data;
+                
+                    const allowedPeers = approvedSessions.get(senderId);
+                    if (!allowedPeers || !allowedPeers.has(receiverId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        return;
+                    }
+                
+                    const target = clients.get(receiverId);
                     if (target) {
-                        target.send(JSON.stringify({ type: "signal", from: data.from, payload: data.payload }));
+                        target.send(JSON.stringify({ type: "signal", from: senderId, payload }));
                     }
                     break;
 
@@ -162,11 +177,49 @@ async function startServer() {
                     clients.delete(data.deviceId);
                     console.log(`Device ${data.deviceId} disconnected.`);
                     break;
+                    case "session_request":
+                        const { from, to, tokenn } = data;
+                    
+                        const sessionUser = verifySessionToken(tokenn);
+                        if (!sessionUser || sessionUser.deviceId !== from) {
+                            ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+                            return;
+                        }
+                    
+                        const targetWs = clients.get(to);
+                        if (!targetWs) {
+                            ws.send(JSON.stringify({ type: "error", message: "Target device not available." }));
+                            return;
+                        }
+                    
+                        // Pošalji zahtjev za potvrdu
+                        targetWs.send(JSON.stringify({ type: "session_confirm", from }));
+                        break;
+                    
+                    
+                    case "session_confirm_response":
+                        const { accepted, responder, requester } = data;
+                    
+                        if (accepted) {
+                            if (!approvedSessions.has(requester)) {
+                                approvedSessions.set(requester, new Set());
+                            }
+                            approvedSessions.get(requester).add(responder);
+                    
+                            ws.send(JSON.stringify({ type: "success", message: `Session approved between ${requester} and ${responder}` }));
+                        } else {
+                            ws.send(JSON.stringify({ type: "info", message: "Session denied." }));
+                        }
+                        break;
+                    
             }
         });
 
         ws.on("close", () => {
-            console.log("Client disconnected");
+            for (const [key, set] of approvedSessions.entries()) {
+                set.delete(deviceId);
+            }
+            approvedSessions.delete(deviceId);
         });
     });
 
