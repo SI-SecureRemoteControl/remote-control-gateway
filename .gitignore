@@ -1,6 +1,7 @@
 # Node.js dependencies
 node_modules/
 package-lock.json
+.env
 
 # Logs
 logs/
@@ -9,8 +10,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment variables (important for security!)
-.env
 
 # Editor & OS files
 .DS_Store
