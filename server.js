@@ -41,7 +41,9 @@ async function connectToWebAdmin() {
             switch (data.type) {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
                 case "control_decision":
-                    const { to, decision } = data;
+                    const { sessionId: token, decision, reason } = data;
+
+                    const to = activeSessions.get(token);
 
                     console.log(`Web Admin ${decision} session request with deviceId: ${to}`);
 
@@ -253,7 +255,7 @@ async function startServer() {
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
                             sessionId: tokenn,
-                            from
+                            deviceId: from
                         }));
 
                         // Notify the device we forwarded the request
