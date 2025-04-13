@@ -3,20 +3,41 @@ const http = require("http");
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
+const { generateSessionId } = require("./utils/generateSessionId");
 const cors = require("cors");
 const dotenv = require('dotenv');
 dotenv.config();
 
-const approvedSessions = new Map(); 
+const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
+const approvedSessions = new Map(); // Store approved sessions
 
 const { connectDB } = require("./database/db");
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HEARTBEAT_TIMEOUT = 600 * 1000; // Zbog lakseg testiranja uspostave sesija, timeout je povecan na 10 minuta
+let targetWs;
+
+const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
+
+async function connectToWebAdmin() {
+    targetWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+
+    targetWs.on('open', () => {
+        console.log('Connected to Web Admin');
+    });
+
+    targetWs.on('close', () => {
+        console.log('Web Admin disconnected. Retrying...');
+        setTimeout(connectToWebAdmin, 5000);
+    });
+
+    targetWs.on('error', (err) => {
+        console.error('Web Admin WS Error:', err.message);
+    });
+}
 
 async function startServer() {
     // Wait for DB connection before proceeding
@@ -88,7 +109,6 @@ async function startServer() {
                         );
 
                         const token = jwt.sign({ deviceId }, process.env.JWT_SECRET);
-
                     
                         console.log(`Device ${deviceId} registered.`);
                         ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.` , token}));
@@ -179,7 +199,7 @@ async function startServer() {
                         break;
                     //device salje request prema comm layeru koji to salje webu
                     case "session_request":
-                        const { from, to, token: tokenn } = data;
+                        const { from, token: tokenn } = data;
 
                         const reqDevice = await devicesCollection.findOne({ deviceId: from });
                         if (!reqDevice) {
@@ -193,30 +213,30 @@ async function startServer() {
                             return;
                         }
 
-                        const targetWs = clients.get(to);
-                        if (!targetWs) {
-                            ws.send(JSON.stringify({ type: "error", message: "Target device not available." }));
-                            return;
+                        const sessionId = generateSessionId();
+                        activeSessions.set(sessionId, from);
+
+                        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                            targetWs.send(JSON.stringify({
+                                type: "request_control",
+                                sessionId,
+                                from
+                            }));
+                    
+                            // Notify the device we forwarded the request
+                            ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId }));
+                        } else {
+                            ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                         }
 
-                        targetWs.send(JSON.stringify({ type: "session_confirm", from }));
                         break;
                     //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
-                    case "session_confirm_response":
-                        const { accepted, from: from1, to: to1/*, token: tokennn */} = data;
+                    case "control_decision":
+                        const { decision, to: to1 } = data;                   
 
-                    // Ako bih ovo odkomentarisao, onda bi web app trebao slati svoj token, da li to treba ili ne?
-                    /*
-                        const sessionUserResponse = verifySessionToken(tokennn);
-                        if (!sessionUserResponse || sessionUserResponse.deviceId !== from1) {
-                            ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                            return;
-                        }
-                    */                    
+                        console.log(`Session request ${decision ? "accepted" : "rejected"} between web admin and ${to1}`);
 
-                        console.log(`Session request ${accepted ? "accepted" : "denied"} between ${from1} and ${to1}`);
-
-                        if (accepted) {
+                        if (decision) {
                             if (!approvedSessions.has(to1)) {
                                 approvedSessions.set(to1, new Set());
                             }
@@ -226,7 +246,7 @@ async function startServer() {
                     
                             const toWs = clients.get(to1);
                             if (toWs) {
-                                toWs.send(JSON.stringify({ type: "session_approved", from: from1, to: to1 }));
+                                toWs.send(JSON.stringify({ type: "session_approved", to: to1 }));
                             }
                         } else {
                             ws.send(JSON.stringify({ type: "info", message: "Session denied." }));
@@ -247,16 +267,16 @@ async function startServer() {
                             ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
                             return;
                         }
-                    
+/*                    
                         const targetWsFinal = clients.get(finalTo);
                         if (!targetWsFinal) {
                             ws.send(JSON.stringify({ type: "error", message: "Target device not available." }));
                             return;
                         }
-
-                        ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between devices." }));
+*/
+                        ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and web admin." }));
                     
-                        targetWsFinal.send(JSON.stringify({ type: "session_started", from: finalFrom, to: finalTo }));
+                        targetWsFinal.send(JSON.stringify({ type: "session_started", from: finalFrom }));
                     
                         break;
 
@@ -387,5 +407,10 @@ async function startServer() {
 // Start the server with DB connection
 startServer().catch((err) => {
     console.error("Error starting server:", err);
+    process.exit(1); // Exit the process if there is an error
+});
+
+connectToWebAdmin().catch((err) => {
+    console.error("Error connecting to web admin:", err);
     process.exit(1); // Exit the process if there is an error
 });
