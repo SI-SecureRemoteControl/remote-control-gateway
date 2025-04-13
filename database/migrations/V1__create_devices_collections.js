@@ -1,13 +1,13 @@
 module.exports = {
-    async up(db, client) {
+  async up(db, client) {
+    const collections = await db.listCollections({ name: "devices" }).toArray();
+
+    if (collections.length === 0) {
       await db.createCollection("devices", {
         validator: {
           $jsonSchema: {
             bsonType: "object",
-            required: [
-              "name",
-              "registrationKey",
-            ],
+            required: ["name", "registrationKey"],
             properties: {
               deviceId: {
                 bsonType: "string",
@@ -50,9 +50,14 @@ module.exports = {
               }
             }
           }
-        }
+        },
+        validationLevel: "strict",
+        validationAction: "error"
       });
-  
-      console.log("Collections created successfully!");
+
+      console.log("'devices' collection created successfully.");
+    } else {
+      console.log("'devices' collection already exists. Skipping creation.");
     }
-  };
+  }
+};
