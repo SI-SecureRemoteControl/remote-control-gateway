@@ -23,6 +23,7 @@ let clientWs;
 const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
+console.log("\n\nStarting Remote Control Gateway...\n\n");
 
 async function connectToWebAdmin() {
     wss = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
