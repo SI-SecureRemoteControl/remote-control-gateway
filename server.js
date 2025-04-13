@@ -251,6 +251,8 @@ async function startServer() {
 
                     activeSessions.set(tokenn, from);
 
+                    console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
+
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
