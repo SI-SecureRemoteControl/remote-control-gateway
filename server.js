@@ -1,11 +1,11 @@
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
+const jwt = require("jsonwebtoken");
+const { verifySessionToken } = require("./utils/authSession");
 const cors = require("cors");
 const dotenv = require('dotenv');
 dotenv.config();
-const jwt = require("jsonwebtoken");
-const { verifySessionToken } = require("./utils/authSession");
 
 const approvedSessions = new Map(); 
 
@@ -14,7 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HEARTBEAT_TIMEOUT =  60 * 1000;
+const HEARTBEAT_TIMEOUT = 600 * 1000; // Zbog lakseg testiranja uspostave sesija, timeout je povecan na 10 minuta
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
 
@@ -179,7 +179,13 @@ async function startServer() {
                         break;
                     //device salje request prema comm layeru koji to salje webu
                     case "session_request":
-                        const { from, to, tokenn } = data;
+                        const { from, to, token: tokenn } = data;
+
+                        const reqDevice = await devicesCollection.findOne({ deviceId: from });
+                        if (!reqDevice) {
+                            ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+                            return;
+                        }
 
                         const sessionUser = verifySessionToken(tokenn);
                         if (!sessionUser || sessionUser.deviceId !== from) {
@@ -197,13 +203,24 @@ async function startServer() {
                         break;
                     //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
                     case "session_confirm_response":
-                        const { accepted, from1, to1} = data;
-                    
+                        const { accepted, from: from1, to: to1/*, token: tokennn */} = data;
+
+                    // Ako bih ovo odkomentarisao, onda bi web app trebao slati svoj token, da li to treba ili ne?
+                    /*
+                        const sessionUserResponse = verifySessionToken(tokennn);
+                        if (!sessionUserResponse || sessionUserResponse.deviceId !== from1) {
+                            ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+                            return;
+                        }
+                    */                    
+
+                        console.log(`Session request ${accepted ? "accepted" : "denied"} between ${from1} and ${to1}`);
+
                         if (accepted) {
                             if (!approvedSessions.has(to1)) {
                                 approvedSessions.set(to1, new Set());
                             }
-                            approvedSessions.get(to1).add(from);
+                            approvedSessions.get(to1).add(from1);
                     
                             ws.send(JSON.stringify({ type: "success", message: `Session approved between ${to1} and ${from1}` }));
                     
@@ -217,7 +234,13 @@ async function startServer() {
                         break;
                     //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                     case "session_final_confirmation":
-                        const { finalToken, requester: finalFrom, responder: finalTo } = data;
+                        const { token: finalToken, requester: finalFrom, responder: finalTo } = data;
+
+                        const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
+                        if (!reqDeviceFinal) {
+                            ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+                            return;
+                        }
                     
                         const sessionUserFinal = verifySessionToken(finalToken);
                         if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
@@ -236,19 +259,26 @@ async function startServer() {
                         targetWsFinal.send(JSON.stringify({ type: "session_started", from: finalFrom, to: finalTo }));
                     
                         break;
-                            
-                    
+
             }
         });
 
+        // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
-            for (const [key, set] of approvedSessions.entries()) {
-                set.delete(deviceId);
+            for (const [id, socket] of clients.entries()) {
+                if (socket === ws) {
+                    clients.delete(id);
+                    lastHeartbeat.delete(id);
+                    for (const [k, s] of approvedSessions.entries()) {
+                        s.delete(id);
+                    }
+                    approvedSessions.delete(id);
+                    console.log(`Cleaned up session info for disconnected device: ${id}`);
+                    break;
+                }
             }
-            approvedSessions.delete(deviceId);
         });
     });
-
 
     // Periodically check for devices that are inactive for too long
     setInterval(() => {
