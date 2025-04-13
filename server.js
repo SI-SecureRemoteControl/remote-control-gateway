@@ -26,15 +26,14 @@ const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
 async function connectToWebAdmin() {
     wss = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+    webAdminWs = wss;
 
     wss.on('open', () => {
         console.log('Connected to Web Admin');
     });
 
-
     wss.on("connection", (ws) => {
-        webAdminWs = ws;
-        console.log("New client connected");
+        console.log("Web Admin connected");
 
         ws.on('message', (message) => {
             const data = JSON.parse(message);
@@ -62,7 +61,6 @@ async function connectToWebAdmin() {
         });
     });
 
-
     wss.on('close', () => {
         console.log('Web Admin disconnected. Retrying...');
         setTimeout(connectToWebAdmin, 5000);
@@ -84,8 +82,9 @@ async function startServer() {
     const clients = new Map(); // Store connected devices/admins
     const lastHeartbeat = new Map(); //---2.task
 
+    clientWs = wss;
+
     wss.on("connection", (ws) => {
-        clientWs = ws;
         console.log("New client connected");
 
         ws.on("message", async (message) => {
