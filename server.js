@@ -272,7 +272,8 @@ async function startServer() {
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
                             sessionId: tokenn,
-                            deviceId: from
+                            deviceId: from,
+                            ovosesalje: "glupost"
                         }));
 
                         // Notify the device we forwarded the request
