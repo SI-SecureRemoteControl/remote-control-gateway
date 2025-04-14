@@ -16,10 +16,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs;
+let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
+
+const clients = new Map(); // Store connected devices with their WebSocket connections
+const lastHeartbeat = new Map(); //---2.task
 
 function sendToDevice(deviceId, payload) {
     const ws = clients.get(deviceId);
@@ -32,58 +35,51 @@ function sendToDevice(deviceId, payload) {
 
 
 async function connectToWebAdmin() {
-    wss = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
-    webAdminWs = wss;
+    console.log((`Connecting to Web Admin at ${wss.url}`));
 
-    console.log ((`Connecting to Web Admin at ${wss.url}`));
-
-    wss.on('open', () => {
+    webAdminWs.on('open', () => {
         console.log('Connected to Web Admin');
         webAdminWs = wss;
     });
-/*
-    wss.on("connection", (ws) => {
-        console.log("Web Admin connected");
-*/
-        wss.on('message', (message) => {
-            const data = JSON.parse(message);
-            webAdminWs = wss;
 
-            console.log('\nReceived from Web Admin:', data);
+    webAdminWs.on('message', (message) => {
+        const data = JSON.parse(message);
+        webAdminWs = wss;
 
-            switch (data.type) {
-                //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
-                case "control_decision":
-                    const { sessionId: token, decision, reason } = data;
+        console.log('\nReceived from Web Admin:', data);
 
-                    console.log("control_decision: ", data);
+        switch (data.type) {
+            //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
+            case "control_decision":
+                const { sessionId: token, decision, reason } = data;
 
-                    const to = activeSessions.get(token);
+                console.log("control_decision: ", data);
 
-                    console.log(`Web Admin ${decision} session request with deviceId: ${to} with reason: ${reason}`);
+                const to = activeSessions.get(token);
 
-                    if (decision === "accepted") {
-                        if (!approvedSessions.has(to)) {
-                            approvedSessions.set(to, new Set());
-                        }
-                        approvedSessions.get(to).add("web-admin");
-                        
-                        // Notify the device we forwarded the request
-                        sendToDevice(to, { type: "approved", message: "Web Admin approved session request." });
-                    } else {
-                        sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` });
+                console.log(`Web Admin ${decision} session request with deviceId: ${to} with reason: ${reason}`);
+
+                if (decision === "accepted") {
+                    if (!approvedSessions.has(to)) {
+                        approvedSessions.set(to, new Set());
                     }
-                    break;
-            }
-      //  });
+                    approvedSessions.get(to).add("web-admin");
+
+                    // Notify the device we forwarded the request
+                    sendToDevice(to, { type: "approved", message: "Web Admin approved session request." });
+                } else {
+                    sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` });
+                }
+                break;
+        }
     });
 
-    wss.on('close', () => {
+    webAdminWs.on('close', () => {
         console.log('Web Admin disconnected. Retrying...');
         setTimeout(connectToWebAdmin, 5000);
     });
 
-    wss.on('error', (err) => {
+    webAdminWs.on('error', (err) => {
         console.error('Web Admin WS Error:', err.message);
     });
 }
@@ -96,13 +92,9 @@ async function startServer() {
     const server = http.createServer(app);
     const wss = new WebSocket.Server({ server });
 
-    const clients = new Map(); // Store connected devices/admins
-    const lastHeartbeat = new Map(); //---2.task
-
-    clientWs = wss;
-
     wss.on("connection", (ws) => {
         console.log("New client connected");
+        clientWs = ws;
 
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
