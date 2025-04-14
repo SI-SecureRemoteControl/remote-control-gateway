@@ -17,10 +17,18 @@ app.use(cors());
 app.use(express.json());
 
 let webAdminWs;
-let clientWs;
 
 const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
+
+function sendToDevice(deviceId, payload) {
+    const ws = clients.get(deviceId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload));
+    } else {
+        console.warn(`Device ${deviceId} not connected.`);
+    }
+}
 
 
 async function connectToWebAdmin() {
@@ -31,6 +39,7 @@ async function connectToWebAdmin() {
 
     wss.on('open', () => {
         console.log('Connected to Web Admin');
+        webAdminWs = wss;
     });
 /*
     wss.on("connection", (ws) => {
@@ -38,6 +47,7 @@ async function connectToWebAdmin() {
 */
         wss.on('message', (message) => {
             const data = JSON.parse(message);
+            webAdminWs = wss;
 
             switch (data.type) {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
@@ -57,9 +67,9 @@ async function connectToWebAdmin() {
                         approvedSessions.get(to).add("web-admin");
                         
                         // Notify the device we forwarded the request
-                        clientWs.send(JSON.stringify({ type: "approved", message: "Web Admin approved session request." }));
+                        sendToDevice(to, { type: "approved", message: "Web Admin approved session request." });
                     } else {
-                        clientWs.send(JSON.stringify({ type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` }));
+                        sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` });
                     }
                     break;
             }
