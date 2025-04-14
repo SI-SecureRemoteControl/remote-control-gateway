@@ -16,7 +16,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
