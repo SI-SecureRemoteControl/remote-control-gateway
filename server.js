@@ -55,7 +55,7 @@ async function connectToWebAdmin() {
 
                 const to = activeSessions.get(token);
 
-                console.log(`Web Admin ${decision} session request with deviceId: ${to} with reason: ${reason}`);
+                console.log(`Web Admin ${decision} session request with deviceId: ${to}.`);
 
                 if (decision === "accepted") {
                     if (!approvedSessions.has(to)) {
