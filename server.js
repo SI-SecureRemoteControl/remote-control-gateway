@@ -49,6 +49,8 @@ async function connectToWebAdmin() {
             const data = JSON.parse(message);
             webAdminWs = wss;
 
+            console.log('\nReceived from Web Admin:', data);
+
             switch (data.type) {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
                 case "control_decision":
