@@ -49,11 +49,11 @@ async function connectToWebAdmin() {
         switch (data.type) {
             //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "control_status_update":
-                const { sessionId: token, decision } = data;
+                const { sessionId: token, decision, deviceId: to } = data;
 
                 console.log("control_status_update: ", data);
 
-                const to = activeSessions.get(token);
+               // const to = activeSessions.get(token);
 
                 console.log(`Web Admin ${decision} session request with deviceId: ${to}.`);
 
