@@ -275,6 +275,9 @@ async function startServer() {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                     }
 
+                    console.log("ActiveSessions: \n\n", activeSessions);
+                    console.log("ApprovedSessions: \n\n", approvedSessions);
+
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                 case "session_final_confirmation":
