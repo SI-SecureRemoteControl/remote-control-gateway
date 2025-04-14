@@ -257,7 +257,7 @@ async function startServer() {
                     activeSessions.set(tokenn, from);
 
                     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
-/*
+
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
@@ -270,9 +270,6 @@ async function startServer() {
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                     }
-*/
-
-                    ws.send(JSON.stringify({ type: "approved", message: "Web Admin approved session request." }));
 
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
