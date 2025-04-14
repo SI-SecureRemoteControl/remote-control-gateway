@@ -52,8 +52,10 @@ async function connectToWebAdmin() {
             case "control_status_update":
                 const { sessionId: token, decision, deviceId: to } = data;
 
-                console.log("control_status_update: ", data);
+                webAdminWs.send(JSON.stringify({ type: "control_status", from: to, sessionId: token, status: "connected" }));
 
+                console.log("control_status_update: ", data);
+/*
                // const to = activeSessions.get(token);
 
                 console.log(`Web Admin ${decision} session request with deviceId: ${to}.`);
@@ -69,6 +71,7 @@ async function connectToWebAdmin() {
                 } else {
                     sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${data.reason}` });
                 }
+*/
                 break;
         }
     });
