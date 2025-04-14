@@ -25,7 +25,7 @@ let clients = new Map(); // Store connected devices with their WebSocket connect
 let lastHeartbeat = new Map(); //---2.task
 
 function sendToDevice(deviceId, payload) {
-    console.log("Broj klijenata:", clients.size());
+    console.log("Broj klijenata:", clients);
     const ws = clients.get(deviceId);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
