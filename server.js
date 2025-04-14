@@ -94,6 +94,8 @@ async function startServer() {
         console.log("New client connected");
         clientWs = ws;
 
+        clients.set(deviceId, ws);
+
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
 
