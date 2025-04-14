@@ -23,11 +23,12 @@ let clientWs;
 const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
-console.log("\n\nStarting Remote Control Gateway...\n\n");
 
 async function connectToWebAdmin() {
     wss = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
     webAdminWs = wss;
+
+    console.log ((`Connecting to Web Admin at ${wss.url}`));
 
     wss.on('open', () => {
         console.log('Connected to Web Admin');
@@ -44,9 +45,11 @@ async function connectToWebAdmin() {
                 case "control_decision":
                     const { sessionId: token, decision, reason } = data;
 
+                    console.log("control_decision: ", data);
+
                     const to = activeSessions.get(token);
 
-                    console.log(`Web Admin ${decision} session request with deviceId: ${to}`);
+                    console.log(`Web Admin ${decision} session request with deviceId: ${to} with reason: ${reason}`);
 
                     if (decision === "accepted") {
                         if (!approvedSessions.has(to)) {
@@ -57,7 +60,7 @@ async function connectToWebAdmin() {
                         // Notify the device we forwarded the request
                         clientWs.send(JSON.stringify({ type: "approved", message: "Web Admin approved session request." }));
                     } else {
-                        clientWs.send(JSON.stringify({ type: "rejected", message: "Web Admin rejected session request." }));
+                        clientWs.send(JSON.stringify({ type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` }));
                     }
                     break;
             }
@@ -238,6 +241,8 @@ async function startServer() {
                 case "session_request":
                     const { from, token: tokenn } = data;
 
+                    console.log(`Session request from device ${from} with token ${tokenn}`);
+
                     const reqDevice = await devicesCollection.findOne({ deviceId: from });
                     if (!reqDevice) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
@@ -271,6 +276,8 @@ async function startServer() {
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                 case "session_final_confirmation":
                     const { token: finalToken, from: finalFrom, decision } = data;
+
+                    console.log(`Session final confirmation from device ${finalFrom} with token ${finalToken} and decision ${decision}`);
 
                     const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
                     if (!reqDeviceFinal) {
