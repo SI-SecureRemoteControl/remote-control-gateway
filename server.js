@@ -35,16 +35,14 @@ function sendToDevice(deviceId, payload) {
 
 
 async function connectToWebAdmin() {
-    console.log((`Connecting to Web Admin at ${wss.url}`));
+    console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
     webAdminWs.on('open', () => {
         console.log('Connected to Web Admin');
-        webAdminWs = wss;
     });
 
     webAdminWs.on('message', (message) => {
         const data = JSON.parse(message);
-        webAdminWs = wss;
 
         console.log('\nReceived from Web Admin:', data);
 
