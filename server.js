@@ -104,10 +104,13 @@ async function startServer() {
                 case "register": // Device registration
                     const { deviceId, registrationKey } = data;
 
+                    // Add device to the clients map
+                    clients.set(deviceId, ws);
+
                     // Validate request payload
                     if (!deviceId || !registrationKey) {
                         ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
-                        return;
+                       // return;
                     }
 
                     // Find device using this registrationKey
@@ -115,13 +118,13 @@ async function startServer() {
                     if (!existingDevice) {
                         // If that device doesn't exist in DB, given registrationKey is invalid
                         ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
-                        return;
+                       // return;
                     }
 
                     // If the registrationKey is used by another device, prevent hijack (switching devices)
                     if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
                         ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
-                        return;
+                      //  return;
                     }
 
                     // Create device data with mandatory fields
@@ -136,8 +139,6 @@ async function startServer() {
                         if (data[field]) deviceData[field] = data[field];
                     });
 
-                    // Add device to the clients map
-                    clients.set(deviceId, ws);
                     lastHeartbeat.set(deviceId, new Date());
 
                     console.log(`Device ${deviceId} connected.`);
@@ -320,6 +321,9 @@ async function startServer() {
 
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
+            console.log("Client disconnected");
+            console.log("Klijenti: ", clients);
+
             /*
             for (const [id, socket] of clients.entries()) {
                 if (socket === ws) {
