@@ -21,8 +21,8 @@ let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm'
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
-const clients = new Map(); // Store connected devices with their WebSocket connections
-const lastHeartbeat = new Map(); //---2.task
+let clients = new Map(); // Store connected devices with their WebSocket connections
+let lastHeartbeat = new Map(); //---2.task
 
 function sendToDevice(deviceId, payload) {
     const ws = clients.get(deviceId);
@@ -92,7 +92,6 @@ async function startServer() {
 
     wss.on("connection", (ws) => {
         console.log("New client connected");
-        clientWs = ws;
 
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
