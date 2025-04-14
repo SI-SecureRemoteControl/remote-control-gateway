@@ -107,6 +107,8 @@ async function startServer() {
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
 
+            console.log('\nReceived from device:', data);
+
             switch (data.type) {
                 //prilikom registracije, generise se token koji se vraca uređaju za dalje interakcije
                 case "register": // Device registration
