@@ -3,7 +3,6 @@ const http = require("http");
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
-//const { generateSessionId } = require("./utils/generateSessionId");
 const cors = require("cors");
 const dotenv = require('dotenv');
 dotenv.config();
@@ -33,11 +32,11 @@ async function connectToWebAdmin() {
     wss.on('open', () => {
         console.log('Connected to Web Admin');
     });
-
+/*
     wss.on("connection", (ws) => {
         console.log("Web Admin connected");
-
-        ws.on('message', (message) => {
+*/
+        wss.on('message', (message) => {
             const data = JSON.parse(message);
 
             switch (data.type) {
@@ -64,7 +63,7 @@ async function connectToWebAdmin() {
                     }
                     break;
             }
-        });
+      //  });
     });
 
     wss.on('close', () => {
