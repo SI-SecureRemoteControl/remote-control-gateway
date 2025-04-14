@@ -48,10 +48,10 @@ async function connectToWebAdmin() {
 
         switch (data.type) {
             //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
-            case "control_decision":
-                const { sessionId: token, decision, reason } = data;
+            case "control_status_update":
+                const { sessionId: token, decision } = data;
 
-                console.log("control_decision: ", data);
+                console.log("control_status_update: ", data);
 
                 const to = activeSessions.get(token);
 
@@ -66,7 +66,7 @@ async function connectToWebAdmin() {
                     // Notify the device we forwarded the request
                     sendToDevice(to, { type: "approved", message: "Web Admin approved session request." });
                 } else {
-                    sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` });
+                    sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${data.reason}` });
                 }
                 break;
         }
