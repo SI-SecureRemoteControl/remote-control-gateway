@@ -16,7 +16,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+let webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 60 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -26,6 +26,7 @@ const lastHeartbeat = new Map(); //---2.task
 
 function sendToDevice(deviceId, payload) {
     const ws = clients.get(deviceId);
+    console.log(ws);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
     } else {
@@ -245,6 +246,7 @@ async function startServer() {
                     const { from, token: tokenn } = data;
 
                     console.log(`Session request from device ${from} with token ${tokenn}`);
+                    clients.set(from, ws);
 
                     const reqDevice = await devicesCollection.findOne({ deviceId: from });
                     if (!reqDevice) {
@@ -295,10 +297,10 @@ async function startServer() {
                     }
 
                     if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: token, status: "connected" }));
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "connected" }));
                     }
                     else if (decision === "rejected") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: token, status: "failed" }));
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
                     }
 
                     ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
@@ -424,7 +426,7 @@ async function startServer() {
         }
     });
 
-    const PORT = process.env.PORT || 8080;
+    const PORT = process.env.PORT || 8090;
     server.listen(PORT, () => {
     });
 }
