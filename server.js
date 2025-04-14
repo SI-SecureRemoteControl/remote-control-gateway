@@ -263,6 +263,8 @@ async function startServer() {
                     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        console.log("Ja posaljem webu request od androida");
+
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
                             sessionId: tokenn,
