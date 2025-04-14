@@ -18,7 +18,7 @@ app.use(express.json());
 
 let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
-const HEARTBEAT_TIMEOUT = 60 * 1000;
+const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
 const clients = new Map(); // Store connected devices with their WebSocket connections
@@ -310,6 +310,7 @@ async function startServer() {
 
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
+            /*
             for (const [id, socket] of clients.entries()) {
                 if (socket === ws) {
                     clients.delete(id);
@@ -322,7 +323,9 @@ async function startServer() {
                     break;
                 }
             }
+            */
         });
+        
     });
 
     // Periodically check for devices that are inactive for too long
@@ -353,7 +356,7 @@ async function startServer() {
                         }
                     );
 
-                    clients.delete(deviceId); // Remove from connected clients
+                //    clients.delete(deviceId); // Remove from connected clients
                     lastHeartbeat.delete(deviceId); // Remove from heartbeat map
                     try {
                         ws.close(); // Close socket connection if still open
