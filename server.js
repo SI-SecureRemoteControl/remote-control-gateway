@@ -272,7 +272,7 @@ async function startServer() {
                     }
 */
 
-                    clientWs.send(JSON.stringify({ type: "approved", message: "Web Admin approved session request." }));
+                    ws.send(JSON.stringify({ type: "approved", message: "Web Admin approved session request." }));
 
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
