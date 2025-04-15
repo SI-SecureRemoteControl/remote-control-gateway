@@ -50,28 +50,55 @@ async function connectToWebAdmin() {
         switch (data.type) {
             //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "control_status_update":
-                const { sessionId: token, decision, deviceId: to } = data;
-
-                webAdminWs.send(JSON.stringify({ type: "control_status", from: to, sessionId: token, status: "connected" }));
+                const { sessionId, decision, deviceId } = data;
 
                 console.log("control_status_update: ", data);
-
-               // const to = activeSessions.get(token);
-
-                console.log(`Web Admin ${decision} session request with deviceId: ${to}.`);
+                
+                // Get the device ID from active sessions map (more reliable)
+                const targetDeviceId = activeSessions.get(sessionId) || deviceId;
+                
+                console.log(`Web Admin ${decision} session request for device: ${targetDeviceId}.`);
 
                 if (decision === "accepted") {
-                    if (!approvedSessions.has(to)) {
-                        approvedSessions.set(to, new Set());
+                    // Track approved session
+                    if (!approvedSessions.has(targetDeviceId)) {
+                        approvedSessions.set(targetDeviceId, new Set());
                     }
-                    approvedSessions.get(to).add("web-admin");
+                    approvedSessions.get(targetDeviceId).add("web-admin");
+                    
+                    // Send pending status to Web Admin (awaiting device confirmation)
+                    webAdminWs.send(JSON.stringify({ 
+                        type: "control_status", 
+                        from: targetDeviceId, 
+                        sessionId: sessionId, 
+                        status: "pending_device_confirmation" 
+                    }));
 
-                    // Notify the device we forwarded the request
-                    sendToDevice(to, { type: "approved", message: "Web Admin approved session request." });
+                    // Notify the device
+                    sendToDevice(targetDeviceId, { 
+                        type: "approved", 
+                        message: "Web Admin approved session request.", 
+                        sessionId: sessionId 
+                    });
                 } else {
-                    sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${data.reason}` });
+                    // Send rejected status to Web Admin
+                    webAdminWs.send(JSON.stringify({ 
+                        type: "control_status", 
+                        from: targetDeviceId, 
+                        sessionId: sessionId, 
+                        status: "rejected" 
+                    }));
+                    
+                    // Notify the device
+                    sendToDevice(targetDeviceId, { 
+                        type: "rejected", 
+                        message: `Web Admin rejected session request. Reason: ${data.reason || "Not specified"}`,
+                        sessionId: sessionId
+                    });
+                    
+                    // Clean up session data
+                    activeSessions.delete(sessionId);
                 }
-                
                 break;
         }
     });
@@ -218,17 +245,57 @@ async function startServer() {
                     break;
                 //provjerava se sesija prije slanja signala
                 case "signal":
-                    const { from: senderId, to: receiverId, payload } = data;
-
-                    const allowedPeers = approvedSessions.get(senderId);
-                    if (!allowedPeers || !allowedPeers.has(receiverId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                    const { from, to, payload } = data;
+                    
+                    console.log(`Signal from ${from} to ${to}`);
+                    
+                    // Check if session is approved
+                    let isApproved = false;
+                    
+                    // Check if from device is allowed to send to "to" device
+                    if (approvedSessions.has(from) && approvedSessions.get(from).has(to)) {
+                        isApproved = true;
+                    }
+                    
+                    // Also check the reverse, if "to" device is allowed to receive from "from" device
+                    if (approvedSessions.has(to) && approvedSessions.get(to).has(from)) {
+                        isApproved = true;
+                    }
+                    
+                    // Special case for web admin which might have a different identifier
+                    if (from === "web-admin" || to === "web-admin") {
+                        isApproved = true; // Adjust this logic as needed
+                    }
+                    
+                    if (!isApproved) {
+                        ws.send(JSON.stringify({ 
+                            type: "error", 
+                            message: "Session not approved between devices." 
+                        }));
                         return;
                     }
-
-                    const target = clients.get(receiverId);
-                    if (target) {
-                        target.send(JSON.stringify({ type: "signal", from: senderId, payload }));
+                    
+                    // Send signal to target device
+                    if (to === "web-admin" && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        webAdminWs.send(JSON.stringify({ 
+                            type: "signal", 
+                            from: from, 
+                            payload: payload 
+                        }));
+                    } else {
+                        const targetWs = clients.get(to);
+                        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                            targetWs.send(JSON.stringify({ 
+                                type: "signal", 
+                                from: from, 
+                                payload: payload 
+                            }));
+                        } else {
+                            ws.send(JSON.stringify({ 
+                                type: "error", 
+                                message: `Target device ${to} not connected.` 
+                            }));
+                        }
                     }
                     break;
                 //zasad nista
@@ -291,33 +358,79 @@ async function startServer() {
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                 case "session_final_confirmation":
-                    const { token: finalToken, from: finalFrom, decision } = data;
+                    const { token: finalToken, from: finalFrom, decision: finalDecision } = data;
 
-                    console.log(`Session final confirmation from device ${finalFrom} with token ${finalToken} and decision ${decision}`);
+                    console.log(`Session final confirmation from device ${finalFrom} with token ${finalToken} and decision ${finalDecision}`);
 
+                    // Validate device is registered
                     const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
                     if (!reqDeviceFinal) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
                         return;
                     }
 
+                    // Validate session token
                     const sessionUserFinal = verifySessionToken(finalToken);
                     if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
                         return;
                     }
 
-                    if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "connected" }));
+                    if (finalDecision === "accepted") {
+                        // Set up bi-directional approval for both parties
+                        if (!approvedSessions.has("web-admin")) {
+                            approvedSessions.set("web-admin", new Set());
+                        }
+                        approvedSessions.get("web-admin").add(finalFrom);
+                        
+                        // Notify web admin that device confirmed
+                        webAdminWs.send(JSON.stringify({ 
+                            type: "control_status", 
+                            from: finalFrom, 
+                            sessionId: finalToken, 
+                            status: "connected" 
+                        }));
+                        
+                        // Confirm to device
+                        ws.send(JSON.stringify({ 
+                            type: "session_confirmed", 
+                            message: "Session successfully started between device and Web Admin.",
+                            status: "connected"
+                        }));
+                        
+                        // Update device status in database
+                        await devicesCollection.findOneAndUpdate(
+                            { deviceId: finalFrom },
+                            {
+                                $set: {
+                                    status: "in_session",
+                                    lastActiveTime: new Date()
+                                }
+                            }
+                        );
+                    } else if (finalDecision === "rejected") {
+                        // Notify web admin of rejection
+                        webAdminWs.send(JSON.stringify({ 
+                            type: "control_status", 
+                            from: finalFrom, 
+                            sessionId: finalToken, 
+                            status: "failed",
+                            reason: "Rejected by device"
+                        }));
+                        
+                        // Clean up session data
+                        activeSessions.delete(finalToken);
+                        if (approvedSessions.has(finalFrom)) {
+                            approvedSessions.get(finalFrom).delete("web-admin");
+                        }
+                        
+                        // Confirm to device
+                        ws.send(JSON.stringify({ 
+                            type: "session_rejected", 
+                            message: "Session rejected successfully."
+                        }));
                     }
-                    else if (decision === "rejected") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
-                    }
-
-                    ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
-
                     break;
-
             }
         });
 
