@@ -113,7 +113,7 @@ async function startServer() {
                     // Validate request payload
                     if (!deviceId || !registrationKey) {
                         ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
-                       // return;
+                        return;
                     }
 
                     // Find device using this registrationKey
@@ -121,13 +121,13 @@ async function startServer() {
                     if (!existingDevice) {
                         // If that device doesn't exist in DB, given registrationKey is invalid
                         ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
-                       // return;
+                        return;
                     }
 
                     // If the registrationKey is used by another device, prevent hijack (switching devices)
                     if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
                         ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
-                      //  return;
+                        return;
                     }
 
                     // Create device data with mandatory fields
@@ -309,15 +309,67 @@ async function startServer() {
 
                     if (decision === "accepted") {
                         webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "connected" }));
-                    }
-                    else if (decision === "rejected") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
-                    }
+                    
+                        // Add both sides as approved
+                        if (!approvedSessions.has(finalFrom)) {
+                            approvedSessions.set(finalFrom, new Set());
+                        }
+                        approvedSessions.get(finalFrom).add("web-admin");
+                    
+                        if (!approvedSessions.has("web-admin")) {
+                            approvedSessions.set("web-admin", new Set());
+                        }
+                        approvedSessions.get("web-admin").add(finalFrom);
+                    
+                        // If it's peer-to-peer (device to device), approve both directions:
+                        const responder = data.responder || "device-def"; // <- ako šalješ i responder iz HTML-a
+                        if (!approvedSessions.has(finalFrom)) approvedSessions.set(finalFrom, new Set());
+                        approvedSessions.get(finalFrom).add(responder);
+                    
+                        if (!approvedSessions.has(responder)) approvedSessions.set(responder, new Set());
+                        approvedSessions.get(responder).add(finalFrom);
 
-                    ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
+                        ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
+                    }
+                    
+                    else if (decision === "rejected") {
+                        // Obavijesti Web Admin da je sesija odbijena
+                        webAdminWs.send(JSON.stringify({
+                            type: "control_status",
+                            from: finalFrom,
+                            sessionId: finalToken,
+                            status: "failed",
+                            reason: "Rejected by device"
+                        }));
+                    
+                        // Ukloni aktivnu sesiju
+                        activeSessions.delete(finalToken);
+                    
+                        // Ukloni prethodno odobrenu vezu (ako postoji)
+                        if (approvedSessions.has(finalFrom)) {
+                            approvedSessions.get(finalFrom).delete("web-admin");
+                            if (approvedSessions.get(finalFrom).size === 0) {
+                                approvedSessions.delete(finalFrom);
+                            }
+                        }
+                    
+                        if (approvedSessions.has("web-admin")) {
+                            approvedSessions.get("web-admin").delete(finalFrom);
+                            if (approvedSessions.get("web-admin").size === 0) {
+                                approvedSessions.delete("web-admin");
+                            }
+                        }
+                    
+                        // Pošalji potvrdu uređaju
+                        ws.send(JSON.stringify({
+                            type: "session_rejected",
+                            message: "Session rejected by device.",
+                            status: "failed"
+                        }));
+                    }
 
                     break;
-
+                    
             }
         });
 
