@@ -16,17 +16,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+let webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
 
-const HEARTBEAT_TIMEOUT = 60 * 1000;
+const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
-const clients = new Map(); // Store connected devices with their WebSocket connections
-const lastHeartbeat = new Map(); //---2.task
+let clients = new Map(); // Store connected devices with their WebSocket connections
+let lastHeartbeat = new Map(); //---2.task
 
 function sendToDevice(deviceId, payload) {
+    console.log("Broj klijenata:", clients);
     const ws = clients.get(deviceId);
-    console.log(ws);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
     } else {
@@ -38,43 +38,78 @@ function sendToDevice(deviceId, payload) {
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
+    webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+
     webAdminWs.on('open', () => {
-        console.log('Connected to Web Admin');
+        console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
     });
 
     webAdminWs.on('message', (message) => {
-        const data = JSON.parse(message);
-
-        console.log('\nReceived from Web Admin:', data);
-
-        switch (data.type) {
-            //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
-            case "control_decision":
-                const { sessionId: token, decision, reason } = data;
-
-                console.log("control_decision: ", data);
-
-                const to = activeSessions.get(token);
-
-                console.log(`Web Admin ${decision} session request with deviceId: ${to} with reason: ${reason}`);
-
-                if (decision === "accepted") {
-                    if (!approvedSessions.has(to)) {
-                        approvedSessions.set(to, new Set());
+        try{
+            const data = JSON.parse(message);
+            console.log('\nCOMM LAYER: Received message from Web Admin WS:', data);
+            switch (data.type) {
+                //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
+            case "request_received":
+                    console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
+                    // No action needed towards the device here yet.
+                    break;
+                    case "control_decision": // <--- ADD THIS CASE
+                    console.log("COMM LAYER: Processing control_decision from Backend.");
+                    const { sessionId, decision } = data; // Get session ID (token) and decision
+    
+                    // Find the device ID associated with this session token
+                    const deviceId = activeSessions.get(sessionId);
+    
+                    if (!deviceId) {
+                        console.error(`COMM LAYER: Received control_decision for session ${sessionId}, but couldn't find deviceId in activeSessions.`);
+                        return; // Can't forward if we don't know who to send it to
                     }
-                    approvedSessions.get(to).add("web-admin");
-
-                    // Notify the device we forwarded the request
-                    sendToDevice(to, { type: "approved", message: "Web Admin approved session request." });
-                } else {
-                    sendToDevice(to, { type: "rejected", message: `Web Admin rejected session request. Reason: ${reason}` });
-                }
-                break;
+    
+                    console.log(`COMM LAYER: Found deviceId ${deviceId} for session ${sessionId}. Decision: ${decision}`);
+    
+                    // Now, send the appropriate message back to the ORIGINAL device
+                    if (decision === "accepted") {
+                        console.log(`COMM LAYER: Sending 'approved' message to device ${deviceId}`);
+                        sendToDevice(deviceId, {
+                            type: "approved", // Or "session_approved", choose a consistent type
+                            sessionId: sessionId,
+                            message: "Admin approved the session request."
+                        });
+    
+                        // Update your approvedSessions map based on your logic
+                         if (!approvedSessions.has(deviceId)) {
+                             approvedSessions.set(deviceId, new Set());
+                         }
+                         approvedSessions.get(deviceId).add("web-admin"); // Assuming 'web-admin' is the identifier for the backend/admin
+    
+                    } else { // Handle rejection
+                        console.log(`COMM LAYER: Sending 'rejected' message to device ${deviceId}`);
+                         sendToDevice(deviceId, {
+                             type: "rejected", // Or "session_rejected"
+                             sessionId: sessionId,
+                             message: `Admin rejected the session request. Reason: ${data.reason || 'N/A'}`
+                         });
+                         // Clean up active session if rejected?
+                         activeSessions.delete(sessionId);
+                    }
+                    break; // End of new 'control_decision' case
+    
+                // Other cases like 'error', etc.
+                default:
+                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
+    
+            }
+        } catch (error) {
+            console.error('COMM LAYER: Error parsing message from Web Admin WS:', error);
+            console.error('COMM LAYER: Raw message was:', message.toString());
         }
     });
 
     webAdminWs.on('close', () => {
-        console.log('Web Admin disconnected. Retrying...');
+        const reasonString = reason ? reason.toString() : 'N/A';
+        console.log(`!!! COMM LAYER: Web Admin WS Disconnected. Code: ${code}, Reason: ${reasonString}. Retrying in 5s...`); // Enhanced log
+        // Clear listeners to avoid duplicates on retry if needed, although creating a new object handles this.
         setTimeout(connectToWebAdmin, 5000);
     });
 
@@ -93,7 +128,6 @@ async function startServer() {
 
     wss.on("connection", (ws) => {
         console.log("New client connected");
-        clientWs = ws;
 
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
@@ -105,10 +139,13 @@ async function startServer() {
                 case "register": // Device registration
                     const { deviceId, registrationKey } = data;
 
+                    // Add device to the clients map
+                    clients.set(deviceId, ws);
+
                     // Validate request payload
                     if (!deviceId || !registrationKey) {
                         ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
-                        return;
+                       // return;
                     }
 
                     // Find device using this registrationKey
@@ -116,13 +153,13 @@ async function startServer() {
                     if (!existingDevice) {
                         // If that device doesn't exist in DB, given registrationKey is invalid
                         ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
-                        return;
+                       // return;
                     }
 
                     // If the registrationKey is used by another device, prevent hijack (switching devices)
                     if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
                         ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
-                        return;
+                      //  return;
                     }
 
                     // Create device data with mandatory fields
@@ -137,9 +174,9 @@ async function startServer() {
                         if (data[field]) deviceData[field] = data[field];
                     });
 
-                    // Add device to the clients map
-                    clients.set(deviceId, ws);
                     lastHeartbeat.set(deviceId, new Date());
+
+                    console.log(`Device ${deviceId} connected.`);
 
                     // Update the device status to "active" in the database
                     await devicesCollection.findOneAndUpdate(
@@ -153,6 +190,8 @@ async function startServer() {
                     );
 
                     const token = jwt.sign({ deviceId }, process.env.JWT_SECRET);
+
+                    console.log(`[REGISTRATION] Generated JWT for device ${deviceId}: ${token}`);
 
                     console.log(`Device ${deviceId} registered.`);
                     ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.`, token }));
@@ -245,8 +284,9 @@ async function startServer() {
                 case "session_request":
                     const { from, token: tokenn } = data;
 
-                    console.log(`Session request from device ${from} with token ${tokenn}`);
                     clients.set(from, ws);
+
+                    console.log(`Session request from device ${from} with token ${tokenn}`);
 
                     const reqDevice = await devicesCollection.findOne({ deviceId: from });
                     if (!reqDevice) {
@@ -265,6 +305,8 @@ async function startServer() {
                     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        console.log("Ja posaljem webu request od androida");
+
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
                             sessionId: tokenn,
@@ -276,6 +318,9 @@ async function startServer() {
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                     }
+
+                    console.log("ActiveSessions: \n\n", activeSessions);
+                    console.log("ApprovedSessions: \n\n", approvedSessions);
 
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
@@ -312,6 +357,10 @@ async function startServer() {
 
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
+            console.log("Client disconnected");
+            console.log("Klijenti: ", clients);
+
+            /*
             for (const [id, socket] of clients.entries()) {
                 if (socket === ws) {
                     clients.delete(id);
@@ -324,7 +373,9 @@ async function startServer() {
                     break;
                 }
             }
+            */
         });
+        
     });
 
     // Periodically check for devices that are inactive for too long
@@ -355,7 +406,7 @@ async function startServer() {
                         }
                     );
 
-                    clients.delete(deviceId); // Remove from connected clients
+                //    clients.delete(deviceId); // Remove from connected clients
                     lastHeartbeat.delete(deviceId); // Remove from heartbeat map
                     try {
                         ws.close(); // Close socket connection if still open
@@ -426,7 +477,7 @@ async function startServer() {
         }
     });
 
-    const PORT = process.env.PORT || 8080;
+    const PORT = process.env.PORT || 8090;
     server.listen(PORT, () => {
     });
 }
