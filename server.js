@@ -38,7 +38,7 @@ function sendToDevice(deviceId, payload) {
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
-    webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
