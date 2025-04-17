@@ -286,8 +286,8 @@ async function startServer() {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                     }
 
-                    console.log("ActiveSessions: \n\n", activeSessions);
-                    console.log("ApprovedSessions: \n\n", approvedSessions);
+                    console.log("ActiveSessions:", [...activeSessions.entries()]);
+                    console.log("ApprovedSessions:", [...approvedSessions.entries()]);
 
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
