@@ -107,8 +107,8 @@ async function connectToWebAdmin() {
     });
 
     webAdminWs.on('close', () => {
-        const reasonString = reason ? reason.toString() : 'N/A';
-        console.log(`!!! COMM LAYER: Web Admin WS Disconnected. Code: ${code}, Reason: ${reasonString}. Retrying in 5s...`); // Enhanced log
+        // const reasonString = reason ? reason.toString() : 'N/A';
+        //console.log(`!!! COMM LAYER: Web Admin WS Disconnected. Code: ${code}, Reason: ${reasonString}. Retrying in 5s...`); // Enhanced log
         // Clear listeners to avoid duplicates on retry if needed, although creating a new object handles this.
         setTimeout(connectToWebAdmin, 5000);
     });
