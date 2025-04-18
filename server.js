@@ -25,7 +25,7 @@ let clients = new Map(); // Store connected devices with their WebSocket connect
 let lastHeartbeat = new Map(); //---2.task
 
 function sendToDevice(deviceId, payload) {
-    console.log("Broj klijenata:", clients);
+    console.log("Broj klijenata:", clients.size, "->", Array.from(clients.keys()));
     const ws = clients.get(deviceId);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
@@ -354,63 +354,25 @@ async function startServer() {
                     break;
 
                 case "offer":
-                    {
-                        const offerTarget = clients.get(data.toId);
-                        if (offerTarget) {
-                            offerTarget.send(JSON.stringify({
-                                type: "offer",
-                                fromId: data.fromId,
-                                toId: data.toId,
-                                payload: {
-                                    type: "offer",
-                                    sdp: data.payload.sdp
-                                }
-                            }));
-                        } else {
-                            ws.send(JSON.stringify({ type: "error", message: `Target ${data.toId} not connected.` }));
-                        }
-                    }
-                    break;
-                
                 case "answer":
-                    {
-                        const answerTarget = clients.get(data.toId);
-                        if (answerTarget) {
-                            answerTarget.send(JSON.stringify({
-                                type: "answer",
-                                fromId: data.fromId,
-                                toId: data.toId,
-                                payload: {
-                                    type: "answer",
-                                    sdp: data.payload.sdp
-                                }
-                            }));
-                        } else {
-                            ws.send(JSON.stringify({ type: "error", message: `Target ${data.toId} not connected.` }));
-                        }
-                    }
-                    break;
+                case "ice-candidate": {
+                    const { fromId, toId, payload, type } = data;
                 
-                case "ice-candidate":
-                    {
-                        const iceTarget = clients.get(data.toId);
-                        if (iceTarget) {
-                            iceTarget.send(JSON.stringify({
-                                type: "ice-candidate",
-                                fromId: data.fromId,
-                                toId: data.toId,
-                                payload: {
-                                    candidate: data.payload.candidate,
-                                    sdpMid: data.payload.sdpMid,
-                                    sdpMLineIndex: data.payload.sdpMLineIndex,
-                                    usernameFragment: data.payload.usernameFragment
-                                }
-                            }));
-                        } else {
-                            ws.send(JSON.stringify({ type: "error", message: `Target ${data.toId} not connected.` }));
-                        }
+                    // Ako je cilj Web Admin, šaljemo Web Adminu
+                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
+                    }
+                
+                    // Ako je cilj drugi uređaj, šaljemo preko clients WS
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({ type, fromId, toId, payload }));
+                    } else {
+                        console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
                     }
                     break;
+                    }
+                        
                     
         
 
@@ -421,21 +383,6 @@ async function startServer() {
         ws.on("close", () => {
             console.log("Client disconnected");
             console.log("Klijenti: ", clients);
-
-            /*
-            for (const [id, socket] of clients.entries()) {
-                if (socket === ws) {
-                    clients.delete(id);
-                    lastHeartbeat.delete(id);
-                    for (const [k, s] of approvedSessions.entries()) {
-                        s.delete(id);
-                    }
-                    approvedSessions.delete(id);
-                    console.log(`Cleaned up session info for disconnected device: ${id}`);
-                    break;
-                }
-            }
-            */
         });
         
     });
