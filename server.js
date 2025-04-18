@@ -203,7 +203,7 @@ function sendToDevice(deviceId, payload) {
     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
 
     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
-        console.log("Ja posaljem webu request od androida");
+        console.log("Sending request to web admin from mobile device");
 
         webAdminWs.send(JSON.stringify({
             type: "request_control",
@@ -248,8 +248,44 @@ function sendToDevice(deviceId, payload) {
     ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
 }
 
+function handleControlDecision(data){
+    console.log("COMM LAYER: Processing control_decision from Backend.");
+    const { sessionId, decision } = data; 
 
+    const deviceId = activeSessions.get(sessionId);
 
+    if (!deviceId) {
+        console.error(`COMM LAYER: Received control_decision for session ${sessionId}, but couldn't find deviceId in activeSessions.`);
+        return; // Can't forward if we don't know who to send it to
+    }
+
+    console.log(`COMM LAYER: Found deviceId ${deviceId} for session ${sessionId}. Decision: ${decision}`);
+
+    // Now, send the appropriate message back to the ORIGINAL device
+    if (decision === "accepted") {
+        console.log(`COMM LAYER: Sending 'approved' message to device ${deviceId}`);
+        sendToDevice(deviceId, {
+            type: "approved", 
+            sessionId: sessionId,
+            message: "Admin approved the session request."
+        });
+
+            if (!approvedSessions.has(deviceId)) {
+                approvedSessions.set(deviceId, new Set());
+            }
+            approvedSessions.get(deviceId).add("web-admin"); 
+
+    } else { // Handle rejection
+        console.log(`COMM LAYER: Sending 'rejected' message to device ${deviceId}`);
+            sendToDevice(deviceId, {
+                type: "rejected", // Or "session_rejected"
+                sessionId: sessionId,
+                message: `Admin rejected the session request. Reason: ${data.reason || 'N/A'}`
+            });
+            // Clean up active session if rejected?
+            activeSessions.delete(sessionId);
+    }
+}
 
 
 
@@ -273,46 +309,11 @@ async function connectToWebAdmin() {
             console.log('\nCOMM LAYER: Received message from Web Admin WS:', data);
             switch (data.type) {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
-            case "request_received":
+                case "request_received":
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
                     break;
-                    case "control_decision": 
-                    console.log("COMM LAYER: Processing control_decision from Backend.");
-                    const { sessionId, decision } = data; 
-    
-                    const deviceId = activeSessions.get(sessionId);
-    
-                    if (!deviceId) {
-                        console.error(`COMM LAYER: Received control_decision for session ${sessionId}, but couldn't find deviceId in activeSessions.`);
-                        return; // Can't forward if we don't know who to send it to
-                    }
-    
-                    console.log(`COMM LAYER: Found deviceId ${deviceId} for session ${sessionId}. Decision: ${decision}`);
-    
-                    // Now, send the appropriate message back to the ORIGINAL device
-                    if (decision === "accepted") {
-                        console.log(`COMM LAYER: Sending 'approved' message to device ${deviceId}`);
-                        sendToDevice(deviceId, {
-                            type: "approved", 
-                            sessionId: sessionId,
-                            message: "Admin approved the session request."
-                        });
-    
-                         if (!approvedSessions.has(deviceId)) {
-                             approvedSessions.set(deviceId, new Set());
-                         }
-                         approvedSessions.get(deviceId).add("web-admin"); 
-    
-                    } else { // Handle rejection
-                        console.log(`COMM LAYER: Sending 'rejected' message to device ${deviceId}`);
-                         sendToDevice(deviceId, {
-                             type: "rejected", // Or "session_rejected"
-                             sessionId: sessionId,
-                             message: `Admin rejected the session request. Reason: ${data.reason || 'N/A'}`
-                         });
-                         // Clean up active session if rejected?
-                         activeSessions.delete(sessionId);
-                    }
+                case "control_decision": 
+                    handleControlDecision(data);
                     break; // End of new 'control_decision' case
     
                 default:
@@ -390,7 +391,7 @@ async function startServer() {
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
             console.log("Client disconnected");
-            console.log("Klijenti: ", clients);
+            console.log('All connected clients:', Array.from(clients.keys()));
         });
         
     });
