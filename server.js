@@ -35,6 +35,229 @@ function sendToDevice(deviceId, payload) {
 }
 
 
+  async function handleDeviceRegistration(ws, data){
+    const { deviceId, registrationKey } = data;
+
+    // Add device to the clients map
+    clients.set(deviceId, ws);
+
+    // Validate request payload
+    if (!deviceId || !registrationKey) {
+        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
+        // return;
+    }
+
+    // Find device using this registrationKey
+    const existingDevice = await devicesCollection.findOne({ registrationKey });
+    if (!existingDevice) {
+        // If that device doesn't exist in DB, given registrationKey is invalid
+        ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
+        // return;
+    }
+
+    // If the registrationKey is used by another device, prevent hijack (switching devices)
+    if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
+        ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
+        //  return;
+    }
+
+    // Create device data with mandatory fields
+    const deviceData = {
+        deviceId,
+        status: "active",
+        lastActiveTime: new Date(),
+    };
+
+    // Add optional fields dynamically
+    ["model", "osVersion", "networkType", "ipAddress", "deregistrationKey"].forEach(field => {
+        if (data[field]) deviceData[field] = data[field];
+    });
+
+    lastHeartbeat.set(deviceId, new Date());
+
+    console.log(`Device ${deviceId} connected.`);
+
+    // Update the device status to "active" in the database
+    await devicesCollection.findOneAndUpdate(
+        { registrationKey },
+        {
+            $set: deviceData
+        },
+        {
+            returnDocument: 'after',
+        }
+    );
+
+    const token = jwt.sign({ deviceId }, process.env.JWT_SECRET);
+
+    console.log(`[REGISTRATION] Generated JWT for device ${deviceId}: ${token}`);
+
+    console.log(`Device ${deviceId} registered.`);
+    ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.`, token }));
+
+  }
+
+  async function handleDeviceDeregistration(ws, data){
+    if (!data.deviceId || !data.deregistrationKey) {
+        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, deregistrationKey" }));
+        return;
+    }
+
+    // Check if the device exists
+    const device = await devicesCollection.findOne({ deviceId: data.deviceId });
+    if (!device) {
+        ws.send(JSON.stringify({ type: "error", message: `Device not found.` }));
+        return;
+    }
+
+    // Validate the deregistration key
+    if (device.deregistrationKey !== data.deregistrationKey) {
+        ws.send(JSON.stringify({ type: "error", message: "Invalid deregistration key." }));
+        return;
+    }
+
+    // Remove the device from the database
+    await devicesCollection.deleteOne({ deviceId: data.deviceId });
+
+    // Disconnect the device by closing the WebSocket connection
+    clients.delete(data.deviceId); // Remove from connected clients
+    ws.close(); // Close the WebSocket connection for this device
+
+    console.log(`Device ${data.deviceId} deregistered and removed from database.`);
+
+    // Send success message
+    ws.send(JSON.stringify({ type: "success", message: `Device deregistered successfully and removed from database.` }));
+  }
+
+
+  async function handleDeviceStatus(ws, data){
+    console.log(`Device ${data.deviceId} is ${data.status}`);
+        lastHeartbeat.set(data.deviceId, new Date());
+
+        // Ensure device is in clients map
+        if (!clients.has(data.deviceId)) {
+            clients.set(data.deviceId, ws);
+        }
+
+        await devicesCollection.findOneAndUpdate(
+            { deviceId: data.deviceId },
+            {
+                $set: {
+                    status: data.status,
+                    lastActiveTime: new Date()
+                }
+            },
+            { returnDocument: 'after' }
+        );
+  }
+
+  async function handleDeviceSignal(ws, data){
+    const { from: senderId, to: receiverId, payload } = data;
+
+    const allowedPeers = approvedSessions.get(senderId);
+    if (!allowedPeers || !allowedPeers.has(receiverId)) {
+        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+        return;
+    }
+
+    const target = clients.get(receiverId);
+    if (target) {
+        target.send(JSON.stringify({ type: "signal", from: senderId, payload }));
+    }
+  }
+
+  async function handleDeviceDisconnect(ws, data){
+    await devicesCollection.findOneAndUpdate(
+        { deviceId: data.deviceId },
+        {
+            $set: {
+                status: "inactive",
+                lastActiveTime: new Date()
+            }
+        },
+        { returnDocument: 'after' }
+    );
+    clients.delete(data.deviceId);
+    console.log(`Device ${data.deviceId} disconnected.`);
+    }
+
+  async function handleSessionRequest(ws, data){
+    const { from, token: tokenn } = data;
+
+    clients.set(from, ws);
+
+    const reqDevice = await devicesCollection.findOne({ deviceId: from });
+    if (!reqDevice) {
+        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+        return;
+    }
+
+    const sessionUser = verifySessionToken(tokenn);
+    if (!sessionUser || sessionUser.deviceId !== from) {
+        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+        return;
+    }
+
+    activeSessions.set(tokenn, from);
+
+    console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
+
+    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+        console.log("Ja posaljem webu request od androida");
+
+        webAdminWs.send(JSON.stringify({
+            type: "request_control",
+            sessionId: tokenn,
+            deviceId: from,
+            ovosesalje: "glupost"
+        }));
+
+        // Notify the device we forwarded the request
+        ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
+    } else {
+        ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
+    }
+
+    }
+
+
+  async function handleSessionFinalConfirmation(ws, data){
+    const { token: finalToken, from: finalFrom, decision } = data;
+
+    console.log(`Session final confirmation from device ${finalFrom} with token ${finalToken} and decision ${decision}`);
+
+    const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
+    if (!reqDeviceFinal) {
+        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+        return;
+    }
+
+    const sessionUserFinal = verifySessionToken(finalToken);
+    if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
+        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+        return;
+    }
+
+    if (decision === "accepted") {
+        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "connected" }));
+    }
+    else if (decision === "rejected") {
+        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
+    }
+
+    ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
+}
+
+
+
+
+
+
+
+
+
+
+
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
@@ -52,13 +275,11 @@ async function connectToWebAdmin() {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "request_received":
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
-                    // No action needed towards the device here yet.
                     break;
-                    case "control_decision": // <--- ADD THIS CASE
+                    case "control_decision": 
                     console.log("COMM LAYER: Processing control_decision from Backend.");
-                    const { sessionId, decision } = data; // Get session ID (token) and decision
+                    const { sessionId, decision } = data; 
     
-                    // Find the device ID associated with this session token
                     const deviceId = activeSessions.get(sessionId);
     
                     if (!deviceId) {
@@ -72,16 +293,15 @@ async function connectToWebAdmin() {
                     if (decision === "accepted") {
                         console.log(`COMM LAYER: Sending 'approved' message to device ${deviceId}`);
                         sendToDevice(deviceId, {
-                            type: "approved", // Or "session_approved", choose a consistent type
+                            type: "approved", 
                             sessionId: sessionId,
                             message: "Admin approved the session request."
                         });
     
-                        // Update your approvedSessions map based on your logic
                          if (!approvedSessions.has(deviceId)) {
                              approvedSessions.set(deviceId, new Set());
                          }
-                         approvedSessions.get(deviceId).add("web-admin"); // Assuming 'web-admin' is the identifier for the backend/admin
+                         approvedSessions.get(deviceId).add("web-admin"); 
     
                     } else { // Handle rejection
                         console.log(`COMM LAYER: Sending 'rejected' message to device ${deviceId}`);
@@ -95,7 +315,6 @@ async function connectToWebAdmin() {
                     }
                     break; // End of new 'control_decision' case
     
-                // Other cases like 'error', etc.
                 default:
                      console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
     
@@ -137,220 +356,32 @@ async function startServer() {
             switch (data.type) {
                 //prilikom registracije, generise se token koji se vraca uređaju za dalje interakcije
                 case "register": // Device registration
-                    const { deviceId, registrationKey } = data;
-
-                    // Add device to the clients map
-                    clients.set(deviceId, ws);
-
-                    // Validate request payload
-                    if (!deviceId || !registrationKey) {
-                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
-                       // return;
-                    }
-
-                    // Find device using this registrationKey
-                    const existingDevice = await devicesCollection.findOne({ registrationKey });
-                    if (!existingDevice) {
-                        // If that device doesn't exist in DB, given registrationKey is invalid
-                        ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
-                       // return;
-                    }
-
-                    // If the registrationKey is used by another device, prevent hijack (switching devices)
-                    if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
-                        ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
-                      //  return;
-                    }
-
-                    // Create device data with mandatory fields
-                    const deviceData = {
-                        deviceId,
-                        status: "active",
-                        lastActiveTime: new Date(),
-                    };
-
-                    // Add optional fields dynamically
-                    ["model", "osVersion", "networkType", "ipAddress", "deregistrationKey"].forEach(field => {
-                        if (data[field]) deviceData[field] = data[field];
-                    });
-
-                    lastHeartbeat.set(deviceId, new Date());
-
-                    console.log(`Device ${deviceId} connected.`);
-
-                    // Update the device status to "active" in the database
-                    await devicesCollection.findOneAndUpdate(
-                        { registrationKey },
-                        {
-                            $set: deviceData
-                        },
-                        {
-                            returnDocument: 'after',
-                        }
-                    );
-
-                    const token = jwt.sign({ deviceId }, process.env.JWT_SECRET);
-
-                    console.log(`[REGISTRATION] Generated JWT for device ${deviceId}: ${token}`);
-
-                    console.log(`Device ${deviceId} registered.`);
-                    ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.`, token }));
+                    await handleDeviceRegistration(ws,data);
                     break;
                 //kod ostaje isti
                 case "deregister": // Device deregistration
                     // Validate request payload
-                    if (!data.deviceId || !data.deregistrationKey) {
-                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, deregistrationKey" }));
-                        return;
-                    }
-
-                    // Check if the device exists
-                    const device = await devicesCollection.findOne({ deviceId: data.deviceId });
-                    if (!device) {
-                        ws.send(JSON.stringify({ type: "error", message: `Device not found.` }));
-                        return;
-                    }
-
-                    // Validate the deregistration key
-                    if (device.deregistrationKey !== data.deregistrationKey) {
-                        ws.send(JSON.stringify({ type: "error", message: "Invalid deregistration key." }));
-                        return;
-                    }
-
-                    // Remove the device from the database
-                    await devicesCollection.deleteOne({ deviceId: data.deviceId });
-
-                    // Disconnect the device by closing the WebSocket connection
-                    clients.delete(data.deviceId); // Remove from connected clients
-                    ws.close(); // Close the WebSocket connection for this device
-
-                    console.log(`Device ${data.deviceId} deregistered and removed from database.`);
-
-                    // Send success message
-                    ws.send(JSON.stringify({ type: "success", message: `Device deregistered successfully and removed from database.` }));
+                    await handleDeviceDeregistration(ws,data);
                     break;
                 //kod ostaje isti
                 case "status":
-                    console.log(`Device ${data.deviceId} is ${data.status}`);
-                    lastHeartbeat.set(data.deviceId, new Date());
-
-                    // Ensure device is in clients map
-                    if (!clients.has(data.deviceId)) {
-                        clients.set(data.deviceId, ws);
-                    }
-
-                    await devicesCollection.findOneAndUpdate(
-                        { deviceId: data.deviceId },
-                        {
-                            $set: {
-                                status: data.status,
-                                lastActiveTime: new Date()
-                            }
-                        },
-                        { returnDocument: 'after' }
-                    );
+                    await handleDeviceStatus(ws,data);
                     break;
                 //provjerava se sesija prije slanja signala
                 case "signal":
-                    const { from: senderId, to: receiverId, payload } = data;
-
-                    const allowedPeers = approvedSessions.get(senderId);
-                    if (!allowedPeers || !allowedPeers.has(receiverId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        return;
-                    }
-
-                    const target = clients.get(receiverId);
-                    if (target) {
-                        target.send(JSON.stringify({ type: "signal", from: senderId, payload }));
-                    }
+                    await handleDeviceSignal(ws, data);
                     break;
                 //zasad nista
                 case "disconnect":
-                    await devicesCollection.findOneAndUpdate(
-                        { deviceId: data.deviceId },
-                        {
-                            $set: {
-                                status: "inactive",
-                                lastActiveTime: new Date()
-                            }
-                        },
-                        { returnDocument: 'after' }
-                    );
-                    clients.delete(data.deviceId);
-                    console.log(`Device ${data.deviceId} disconnected.`);
+                    await handleDeviceDisconnect(ws,data);
                     break;
                 //device salje request prema comm layeru koji to salje webu
                 case "session_request":
-                    const { from, token: tokenn } = data;
-
-                    clients.set(from, ws);
-
-                    console.log(`Session request from device ${from} with token ${tokenn}`);
-
-                    const reqDevice = await devicesCollection.findOne({ deviceId: from });
-                    if (!reqDevice) {
-                        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        return;
-                    }
-
-                    const sessionUser = verifySessionToken(tokenn);
-                    if (!sessionUser || sessionUser.deviceId !== from) {
-                        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        return;
-                    }
-
-                    activeSessions.set(tokenn, from);
-
-                    console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
-
-                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
-                        console.log("Ja posaljem webu request od androida");
-
-                        webAdminWs.send(JSON.stringify({
-                            type: "request_control",
-                            sessionId: tokenn,
-                            deviceId: from,
-                            ovosesalje: "glupost"
-                        }));
-
-                        // Notify the device we forwarded the request
-                        ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
-                    } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
-                    }
-
-                    console.log("ActiveSessions: \n\n", activeSessions);
-                    console.log("ApprovedSessions: \n\n", approvedSessions);
-
+                    await handleSessionRequest(ws,data);
                     break;
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                 case "session_final_confirmation":
-                    const { token: finalToken, from: finalFrom, decision } = data;
-
-                    console.log(`Session final confirmation from device ${finalFrom} with token ${finalToken} and decision ${decision}`);
-
-                    const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
-                    if (!reqDeviceFinal) {
-                        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        return;
-                    }
-
-                    const sessionUserFinal = verifySessionToken(finalToken);
-                    if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
-                        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        return;
-                    }
-
-                    if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "connected" }));
-                    }
-                    else if (decision === "rejected") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
-                    }
-
-                    ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
-
+                    await handleSessionFinalConfirmation(ws,data);
                     break;
 
             }
@@ -360,21 +391,6 @@ async function startServer() {
         ws.on("close", () => {
             console.log("Client disconnected");
             console.log("Klijenti: ", clients);
-
-            /*
-            for (const [id, socket] of clients.entries()) {
-                if (socket === ws) {
-                    clients.delete(id);
-                    lastHeartbeat.delete(id);
-                    for (const [k, s] of approvedSessions.entries()) {
-                        s.delete(id);
-                    }
-                    approvedSessions.delete(id);
-                    console.log(`Cleaned up session info for disconnected device: ${id}`);
-                    break;
-                }
-            }
-            */
         });
         
     });
