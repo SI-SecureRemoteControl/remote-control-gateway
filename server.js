@@ -353,6 +353,67 @@ async function startServer() {
 
                     break;
 
+                case "offer":
+                    {
+                        const offerTarget = clients.get(data.toId);
+                        if (offerTarget) {
+                            offerTarget.send(JSON.stringify({
+                                type: "offer",
+                                fromId: data.fromId,
+                                toId: data.toId,
+                                payload: {
+                                    type: "offer",
+                                    sdp: data.payload.sdp
+                                }
+                            }));
+                        } else {
+                            ws.send(JSON.stringify({ type: "error", message: `Target ${data.toId} not connected.` }));
+                        }
+                    }
+                    break;
+                
+                case "answer":
+                    {
+                        const answerTarget = clients.get(data.toId);
+                        if (answerTarget) {
+                            answerTarget.send(JSON.stringify({
+                                type: "answer",
+                                fromId: data.fromId,
+                                toId: data.toId,
+                                payload: {
+                                    type: "answer",
+                                    sdp: data.payload.sdp
+                                }
+                            }));
+                        } else {
+                            ws.send(JSON.stringify({ type: "error", message: `Target ${data.toId} not connected.` }));
+                        }
+                    }
+                    break;
+                
+                case "ice-candidate":
+                    {
+                        const iceTarget = clients.get(data.toId);
+                        if (iceTarget) {
+                            iceTarget.send(JSON.stringify({
+                                type: "ice-candidate",
+                                fromId: data.fromId,
+                                toId: data.toId,
+                                payload: {
+                                    candidate: data.payload.candidate,
+                                    sdpMid: data.payload.sdpMid,
+                                    sdpMLineIndex: data.payload.sdpMLineIndex,
+                                    usernameFragment: data.payload.usernameFragment
+                                }
+                            }));
+                        } else {
+                            ws.send(JSON.stringify({ type: "error", message: `Target ${data.toId} not connected.` }));
+                        }
+                    }
+                    break;
+                    
+        
+
             }
         });
 
