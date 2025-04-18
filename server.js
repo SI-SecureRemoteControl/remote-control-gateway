@@ -9,6 +9,7 @@ dotenv.config();
 
 const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
 const approvedSessions = new Map(); // Store approved sessions
+let devicesCollection;
 
 const { connectDB } = require("./database/db");
 const { status } = require("migrate-mongo");
@@ -341,7 +342,7 @@ async function connectToWebAdmin() {
 async function startServer() {
     // Wait for DB connection before proceeding
     const db = await connectDB();
-    const devicesCollection = db.collection('devices');
+    devicesCollection = db.collection('devices');
 
     const server = http.createServer(app);
     const wss = new WebSocket.Server({ server });
