@@ -1,0 +1,36 @@
+{
+  "deviceId" : "6d024228f1c8e3fc",
+  "sessionId": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkZXZpY2VJZCI6IjZkMDI0MjI4ZjFjOGUzZmMiLCJpYXQiOjE3NDUwNjI1Mzd9.nbtJIe_j177F4gC1s9GFTcAaotDHUrewZuE4iFqHvDo",
+  "events": [
+    {
+      "timestamp": "12:00",
+      "type": "android_session_request",
+      "description": "Android device sent a session request."
+    },
+    {
+      "timestamp": "12:00",
+      "type": "web_admin_request_recieved",
+      "description": "Web admin recieves session request from android device."
+    },
+    {
+      "timestamp": "12:01",
+      "type": "web_admin_accept_session",
+      "description": "Web admin accepts session request."
+    },
+    {
+      "timestamop": "12:01",
+      "type": "android_session_final_confirmation",
+      "description": "Android accepts the final confirmation of session."
+    },
+    {
+      "timestamp": "12:02",
+      "type": "android_session_established",
+      "description": "Session established between android device and web admin."
+    },
+    {
+      "timestamp": "12:03",
+      "type": "web_admin_session_ended",
+      "description": "Web admin ends the session."
+    }
+  ]
+}

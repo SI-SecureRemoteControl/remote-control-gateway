@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
 const cors = require("cors");
 const dotenv = require('dotenv');
+const { logSessionEvent } = require("./utils/sessionLogger");
 dotenv.config();
 
 const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
@@ -52,6 +53,7 @@ async function connectToWebAdmin() {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "request_received":
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
+                    logSessionEvent(data.sessionId, data.deviceId, data.type, "Backend acknowledged request for session.");
                     // No action needed towards the device here yet.
                     break;
                     case "control_decision": // <--- ADD THIS CASE
@@ -76,6 +78,7 @@ async function connectToWebAdmin() {
                             sessionId: sessionId,
                             message: "Admin approved the session request."
                         });
+                        logSessionEvent(sessionId, deviceId, data.type, "Session approved by backend.");
     
                         // Update your approvedSessions map based on your logic
                          if (!approvedSessions.has(deviceId)) {
@@ -92,12 +95,14 @@ async function connectToWebAdmin() {
                          });
                          // Clean up active session if rejected?
                          activeSessions.delete(sessionId);
+                         logSessionEvent(sessionId, deviceId, data.type, "Session rejected by backend.");
                     }
                     break; // End of new 'control_decision' case
     
                 // Other cases like 'error', etc.
                 default:
                      console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
+                     logSessionEvent(data.dessionId, data.deviceId, data.type, "Unhandled message type from Web Admin WS.");
     
             }
         } catch (error) {
@@ -304,6 +309,8 @@ async function startServer() {
 
                     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
 
+                    logSessionEvent(tokenn, from, data.type, "Session request from android device.");
+
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         console.log("Ja posaljem webu request od androida");
 
@@ -316,8 +323,10 @@ async function startServer() {
 
                         // Notify the device we forwarded the request
                         ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
+                        logSessionEvent(tokenn, from, data.type, "Session request forwarded to Web Admin.");
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
+                        logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
                     }
 
                     console.log("ActiveSessions: \n\n", activeSessions);
@@ -333,6 +342,7 @@ async function startServer() {
                     const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
                     if (!reqDeviceFinal) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+                        logSessionEvent(finalToken, finalFrom, data.type, "Device is not registered.");
                         return;
                     }
 
@@ -344,12 +354,15 @@ async function startServer() {
 
                     if (decision === "accepted") {
                         webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "connected" }));
+                        logSessionEvent(finalToken, finalFrom, data.type, "Session accepted by android device");
                     }
                     else if (decision === "rejected") {
                         webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
+                        logSessionEvent(finalToken, finalFrom, data.type, "Session rejected by android device");
                     }
 
                     ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
+                    logSessionEvent(finalToken, finalFrom, data.type, "Session successfully started between device and Web Admin.");
 
                     break;
 
