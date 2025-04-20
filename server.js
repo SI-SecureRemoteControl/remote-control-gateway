@@ -16,7 +16,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+let webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -38,7 +38,7 @@ function sendToDevice(deviceId, payload) {
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
-    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+    webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
@@ -51,10 +51,11 @@ async function connectToWebAdmin() {
             switch (data.type) {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "request_received":
+                
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
                     // No action needed towards the device here yet.
                     break;
-                    case "control_decision": // <--- ADD THIS CASE
+            case "control_decision": // <--- ADD THIS CASE
                     console.log("COMM LAYER: Processing control_decision from Backend.");
                     const { sessionId, decision } = data; // Get session ID (token) and decision
     
@@ -94,6 +95,27 @@ async function connectToWebAdmin() {
                          activeSessions.delete(sessionId);
                     }
                     break; // End of new 'control_decision' case
+                case "offer":
+                case "answer":
+                case "ice-candidate": {
+                            const { fromId, toId, payload, type } = data;
+                        
+                            const isFromAndroid = clients.get(fromId);   
+        
+                            if (isFromAndroid && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                                webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
+                                break;
+                            }
+                            
+                            const target = clients.get(toId);
+        
+                            if (target && target.readyState === WebSocket.OPEN) {
+                                target.send(JSON.stringify({ type, fromId, toId, payload }));
+                            } else {
+                                console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
+                            }
+                            break;
+                        }
     
                 // Other cases like 'error', etc.
                 default:
@@ -503,7 +525,7 @@ async function startServer() {
         }
     });
 
-    const PORT = process.env.PORT || 8080;
+    const PORT = 8090;
     server.listen(PORT, () => {
     });
 }
