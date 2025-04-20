@@ -358,23 +358,22 @@ async function startServer() {
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
                 
-                    // Ako je cilj Web Admin, šaljemo Web Adminu
-                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                    const isFromAndroid = clients.get(fromId);   
+
+                    if (isFromAndroid && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
+                        break;
                     }
-                
-                    // Ako je cilj drugi uređaj, šaljemo preko clients WS
+                    
                     const target = clients.get(toId);
+
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
                     } else {
                         console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
                     }
                     break;
-                    }
-                        
-                    
-        
+                }
 
             }
         });
