@@ -16,7 +16,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -38,7 +38,7 @@ function sendToDevice(deviceId, payload) {
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
-    webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
@@ -95,9 +95,9 @@ async function connectToWebAdmin() {
                          activeSessions.delete(sessionId);
                     }
                     break; // End of new 'control_decision' case
-                case "offer":
-                case "answer":
-                case "ice-candidate": {
+                    case "offer":
+                    case "answer":
+                    case "ice-candidate": {
                             const { fromId, toId, payload, type } = data;
                         
                             const isFromAndroid = clients.get(fromId);   
@@ -525,7 +525,7 @@ async function startServer() {
         }
     });
 
-    const PORT = 8090;
+    const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
     });
 }
