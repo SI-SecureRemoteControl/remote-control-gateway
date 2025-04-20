@@ -1,52 +1,40 @@
-const fs = require('fs');
-const path = require('path');
+const { connectDB } = require('../database/db');
 
-// Define the log file path
-const logFilePath = path.join(__dirname, 'session_logs.json');
+async function logSessionEvent(sessionId, deviceId, eventType, description) {
+    const db = await connectDB();
+    const sessionLogsCollection = db.collection('sessionLogs');
 
-// Utility function to log session events
-function logSessionEvent(sessionId, deviceId, eventType, description) {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date();
+
     const newEvent = {
         timestamp,
         type: eventType,
         description,
     };
 
-    // Read existing logs
-    fs.readFile(logFilePath, 'utf8', (err, data) => {
-        let logs = [];
-        if (!err && data) {
-            try {
-                logs = JSON.parse(data);
-            } catch (parseError) {
-                console.error('Error parsing existing logs:', parseError);
-            }
+    try {
+        // Validate input types
+        if (typeof sessionId !== 'string' || typeof deviceId !== 'string') {
+            throw new Error('sessionId and deviceId must be strings.');
+        }
+        if (typeof eventType !== 'string' || typeof description !== 'string') {
+            throw new Error('eventType and description must be strings.');
         }
 
-        // Find the session by sessionId
-        let session = logs.find(log => log.sessionId === sessionId);
+        // Use upsert to ensure atomicity
+        await sessionLogsCollection.updateOne(
+            { sessionId, deviceId }, // Match criteria
+            {
+                $push: { events: newEvent }, // Push the new event
+                $setOnInsert: { sessionId, deviceId }, // Set these fields if inserting
+            },
+            { upsert: true } // Create the document if it doesn't exist
+        );
 
-        if (session) {
-            // Append the new event to the existing session
-            session.events.push(newEvent);
-        } else {
-            // Create a new session object
-            session = {
-                sessionId,
-                deviceId,
-                events: [newEvent],
-            };
-            logs.push(session);
-        }
-
-        // Write the updated logs back to the file
-        fs.writeFile(logFilePath, JSON.stringify(logs, null, 2), (writeErr) => {
-            if (writeErr) {
-                console.error('Error writing to log file:', writeErr);
-            }
-        });
-    });
+        console.log('Session event logged successfully.');
+    } catch (error) {
+        console.error('Error logging session event:', error);
+    }
 }
 
 module.exports = { logSessionEvent };

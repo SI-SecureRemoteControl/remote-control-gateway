@@ -323,7 +323,7 @@ async function startServer() {
 
                         // Notify the device we forwarded the request
                         ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
-                        logSessionEvent(tokenn, from, data.type, "Session request forwarded to Web Admin.");
+                        //logSessionEvent(tokenn, from, data.type, "Session request forwarded to Web Admin.");
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                         logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
@@ -458,6 +458,22 @@ async function startServer() {
             res.status(500).json({ error: "Failed to fetch active devices" });
         }
     });
+
+    // Endpoint to get session logs for a specific device
+    app.get("/session/logs/:deviceId", async (req, res) => {
+        const { deviceId } = req.params;
+
+        try {
+            const db = await connectDB();
+            const sessionLogsCollection = db.collection('sessionLogs');
+
+            const logs = await sessionLogsCollection.find({ deviceId }).toArray();
+            res.json(logs);
+        } catch (error) {
+            console.error("Error fetching session logs:", error);
+            res.status(500).json({ error: "Failed to fetch session logs" });
+        }
+    })
 
     // Deregister device
     app.post("/devices/deregister", async (req, res) => {
