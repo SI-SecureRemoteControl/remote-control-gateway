@@ -53,7 +53,7 @@ async function connectToWebAdmin() {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "request_received":
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
-                    logSessionEvent(data.sessionId, data.deviceId, data.type, "Backend acknowledged request for session.");
+                    logSessionEvent(data.sessionId, activeSessions.get(data.sessionId), data.type, "Backend acknowledged request for session."); //privremeno rješenje
                     // No action needed towards the device here yet.
                     break;
                     case "control_decision": // <--- ADD THIS CASE
