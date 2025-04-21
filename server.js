@@ -363,7 +363,7 @@ async function startServer() {
                     }
 
                     ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
-                    logSessionEvent(finalToken, finalFrom, data.type, "Session successfully started between device and Web Admin.");
+                    logSessionEvent(finalToken, finalFrom, "session_start", "Session successfully started between device and Web Admin.");
 
                     break;
 
