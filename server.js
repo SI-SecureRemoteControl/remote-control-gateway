@@ -52,11 +52,12 @@ async function connectToWebAdmin() {
             switch (data.type) {
                 //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
             case "request_received":
+                
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
                     logSessionEvent(data.sessionId, activeSessions.get(data.sessionId), data.type, "Backend acknowledged request for session."); //privremeno rješenje
                     // No action needed towards the device here yet.
                     break;
-                    case "control_decision": // <--- ADD THIS CASE
+            case "control_decision": // <--- ADD THIS CASE
                     console.log("COMM LAYER: Processing control_decision from Backend.");
                     const { sessionId, decision } = data; // Get session ID (token) and decision
     
@@ -98,6 +99,27 @@ async function connectToWebAdmin() {
                          activeSessions.delete(sessionId);
                     }
                     break; // End of new 'control_decision' case
+                    case "offer":
+                    case "answer":
+                    case "ice-candidate": {
+                            const { fromId, toId, payload, type } = data;
+                        
+                            const isFromAndroid = clients.get(fromId);   
+        
+                            if (isFromAndroid && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                                webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
+                                break;
+                            }
+                            
+                            const target = clients.get(toId);
+        
+                            if (target && target.readyState === WebSocket.OPEN) {
+                                target.send(JSON.stringify({ type, fromId, toId, payload }));
+                            } else {
+                                console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
+                            }
+                            break;
+                        }
     
                 // Other cases like 'error', etc.
                 default:
@@ -389,6 +411,28 @@ async function startServer() {
                         
                     
         
+
+                case "offer":
+                case "answer":
+                case "ice-candidate": {
+                    const { fromId, toId, payload, type } = data;
+                
+                    const isFromAndroid = clients.get(fromId);   
+
+                    if (isFromAndroid && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
+                        break;
+                    }
+                    
+                    const target = clients.get(toId);
+
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({ type, fromId, toId, payload }));
+                    } else {
+                        console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
+                    }
+                    break;
+                }
 
             }
         });
