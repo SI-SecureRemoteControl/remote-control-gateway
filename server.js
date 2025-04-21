@@ -94,8 +94,8 @@ async function connectToWebAdmin() {
                              message: `Admin rejected the session request. Reason: ${data.reason || 'N/A'}`
                          });
                          // Clean up active session if rejected?
-                         activeSessions.delete(sessionId);
                          logSessionEvent(sessionId, deviceId, data.type, "Session rejected by backend.");
+                         activeSessions.delete(sessionId);
                     }
                     break; // End of new 'control_decision' case
     
@@ -323,7 +323,6 @@ async function startServer() {
 
                         // Notify the device we forwarded the request
                         ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
-                        //logSessionEvent(tokenn, from, data.type, "Session request forwarded to Web Admin.");
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                         logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
@@ -349,6 +348,7 @@ async function startServer() {
                     const sessionUserFinal = verifySessionToken(finalToken);
                     if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+                        logSessionEvent(finalToken, finalFrom, data.type, "Invalid session token.");
                         return;
                     }
 
@@ -359,6 +359,7 @@ async function startServer() {
                     else if (decision === "rejected") {
                         webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: finalToken, status: "failed" }));
                         logSessionEvent(finalToken, finalFrom, data.type, "Session rejected by android device");
+                        break;
                     }
 
                     ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
