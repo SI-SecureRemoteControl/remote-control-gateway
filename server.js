@@ -17,7 +17,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -39,7 +39,7 @@ function sendToDevice(deviceId, payload) {
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
-    webAdminWs = new WebSocket('ws://localhost:8080/ws/control/comm');
+    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
