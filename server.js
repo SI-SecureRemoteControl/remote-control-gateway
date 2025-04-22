@@ -46,28 +46,25 @@ async function connectToWebAdmin() {
     });
 
     webAdminWs.on('message', (message) => {
-        try {
+        try { 
             const data = JSON.parse(message);
             console.log('\nCOMM LAYER: Received message from Web Admin WS:', data);
-            switch (data.type) {
-                //web prihvata/odbija i to salje com layeru koji obavjestava device koji je trazio sesiju
+    
+            switch (data.type) { 
                 case "request_received":
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
-
-                    break; // Correct
-
-                    logSessionEvent(data.sessionId, activeSessions.get(data.sessionId), data.type, "Backend acknowledged request for session."); //privremeno rješenje
-                    // No action needed towards the device here yet.
-
+                    logSessionEvent(data.sessionId, activeSessions.get(data.sessionId), data.type, "Backend acknowledged request for session.");
+                    break; 
     
                 case "control_decision":
                     console.log("COMM LAYER: Processing control_decision from Backend.");
-                    const { sessionId: decisionSessionId, decision } = data; 
+                    const { sessionId: decisionSessionId, decision, reason } = data;
                     const deviceId = activeSessions.get(decisionSessionId);
     
                     if (!deviceId) {
                         console.error(`COMM LAYER: Received control_decision for session ${decisionSessionId}, but couldn't find deviceId in activeSessions.`);
-                        return;
+                        logSessionEvent(decisionSessionId, 'unknown', data.type, `Failed: Could not find active device for session.`);
+                        return; 
                     }
     
                     console.log(`COMM LAYER: Found deviceId ${deviceId} for session ${decisionSessionId}. Decision: ${decision}`);
@@ -79,26 +76,29 @@ async function connectToWebAdmin() {
                             sessionId: decisionSessionId,
                             message: "Admin approved the session request."
                         });
-                        logSessionEvent(sessionId, deviceId, data.type, "Session approved by backend.");
+                        logSessionEvent(decisionSessionId, deviceId, data.type, "Session approved by backend.");
     
                         if (!approvedSessions.has(deviceId)) {
                             approvedSessions.set(deviceId, new Set());
                         }
-                        approvedSessions.get(deviceId).add("web-admin");
+                        approvedSessions.get(deviceId).add("web-admin"); // Assuming "web-admin" is the peer identifier
     
                     } else { 
                         console.log(`COMM LAYER: Sending 'rejected' message to device ${deviceId}`);
-
-
-
                          sendToDevice(deviceId, {
-                             type: "rejected", // Or "session_rejected"
-                             sessionId: sessionId,
-                             message: `Admin rejected the session request. Reason: ${data.reason || 'N/A'}`
+                             type: "rejected", 
+                             sessionId: decisionSessionId, 
+                             message: `Admin rejected the session request. Reason: ${reason || 'N/A'}`
                          });
-                         // Clean up active session if rejected?
-                         logSessionEvent(sessionId, deviceId, data.type, "Session rejected by backend.");
-                         activeSessions.delete(sessionId);
+                         logSessionEvent(decisionSessionId, deviceId, data.type, `Session rejected by backend. Reason: ${reason || 'N/A'}`);
+                         activeSessions.delete(decisionSessionId); 
+                         const deviceApprovedPeers = approvedSessions.get(deviceId);
+                          if (deviceApprovedPeers) {
+                              deviceApprovedPeers.delete("web-admin"); // Remove potential peer added optimistically
+                              if (deviceApprovedPeers.size === 0) {
+                                  approvedSessions.delete(deviceId);
+                              }
+                          }
                     }
                     break; 
     
@@ -107,22 +107,18 @@ async function connectToWebAdmin() {
                     console.log(`COMM LAYER: Processing session_terminated for session ${data.sessionId}`);
                     const { sessionId: terminatedSessionId, reason } = data;
     
-                    // Attempt to find the device ID
+
                     let deviceIdForTermination = activeSessions.get(terminatedSessionId);
     
-                    
-                    if (!deviceIdForTermination) { 
-                        console.warn(`COMM LAYER: Could not find deviceId directly for terminated session ${terminatedSessionId} in activeSessions. May already be cleaned up or was never fully approved.`);
-
-                        if (!deviceIdForTermination) {
-                             console.warn(`COMM LAYER: Received termination for session ${terminatedSessionId}, but couldn't map it back to a deviceId. Ignoring notification to device, but cleaning up activeSessions.`);
-                             activeSessions.delete(terminatedSessionId); // Attempt cleanup anyway
-                             
-                             return; 
-                        }
-                    } 
+                    if (!deviceIdForTermination) {
+                        console.warn(`COMM LAYER: Received termination for session ${terminatedSessionId}, but couldn't map it back to a deviceId in activeSessions. Ignoring notification to device, but cleaning up.`);
+                        logSessionEvent(terminatedSessionId, 'unknown', data.type, `Termination received, but device mapping lost. Reason: ${reason || 'N/A'}`);
+                        activeSessions.delete(terminatedSessionId); // Attempt cleanup anyway
+                        return; 
+                    }
     
                     console.log(`COMM LAYER: Found deviceId ${deviceIdForTermination} for terminated session ${terminatedSessionId}. Reason: ${reason}`);
+                    logSessionEvent(terminatedSessionId, deviceIdForTermination, data.type, `Session terminated by backend. Reason: ${reason || 'N/A'}`);
     
                     // --- Cleanup Logic ---
                     activeSessions.delete(terminatedSessionId);
@@ -130,7 +126,7 @@ async function connectToWebAdmin() {
     
                     const deviceApprovedPeers = approvedSessions.get(deviceIdForTermination);
                     if (deviceApprovedPeers) {
-                        const deleted = deviceApprovedPeers.delete("web-admin");
+                        const deleted = deviceApprovedPeers.delete("web-admin"); // Peer identifier
                         if (deleted) console.log(`COMM LAYER: Removed 'web-admin' peer from approvedSessions for device ${deviceIdForTermination}.`);
     
                         if (deviceApprovedPeers.size === 0) {
@@ -138,7 +134,7 @@ async function connectToWebAdmin() {
                             console.log(`COMM LAYER: Removed device ${deviceIdForTermination} from approvedSessions as no peers remain.`);
                         }
                     } else {
-                        console.log(`COMM LAYER: Device ${deviceIdForTermination} not found in approvedSessions during termination cleanup (might be normal if never fully approved).`);
+                        console.log(`COMM LAYER: Device ${deviceIdForTermination} not found in approvedSessions during termination cleanup (might be normal).`);
                     }
     
                     // --- Notify Device ---
@@ -155,34 +151,41 @@ async function connectToWebAdmin() {
                 case "offer":
                 case "answer":
                 case "ice-candidate": { 
-                    const { fromId, toId, payload, type } = data; 
+                    const { fromId, toId, payload, type } = data;
+    
+                    if (!fromId || !toId || !payload) {
+                        console.warn(`COMM LAYER: Received invalid signaling message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
+                        break; 
+                    }
     
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
                     const target = clients.get(toId);
     
                     if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({ type, fromId, toId, payload })); // Forward to device
+                        target.send(JSON.stringify({ type, fromId, toId, payload })); 
+                        logSessionEvent(data.sessionId || 'unknown', toId, type, `Relayed from backend peer ${fromId}.`);
                     } else {
                         console.warn(`COMM LAYER: Target device ${toId} for ${type} not found or not connected.`);
+                        logSessionEvent(data.sessionId || 'unknown', toId, type, `Failed relay to device (not found/connected). From: ${fromId}`);
                     }
                     break; 
                 } 
     
                 // --- Default Case ---
                 default:
-
-
-             
-
                      console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
-                     logSessionEvent(data.dessionId, data.deviceId, data.type, "Unhandled message type from Web Admin WS.");
-
+                     logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
+                     break;
     
-        } catch (error) {
+            } 
+    
+        } catch (error) { 
             console.error('COMM LAYER: Error parsing message from Web Admin WS:', error);
-            console.error('COMM LAYER: Raw message was:', message.toString());
+            console.error('COMM LAYER: Raw message was:', message.toString ? message.toString() : message);
         } 
-    }); 
+    
+    });  
 
     webAdminWs.on('close', () => {
         // const reasonString = reason ? reason.toString() : 'N/A';
