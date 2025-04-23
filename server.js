@@ -1,5 +1,6 @@
 const express = require("express");
-const http = require("http");
+const fs = require("fs");
+const https = require("https");
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
@@ -204,7 +205,10 @@ async function startServer() {
     const db = await connectDB();
     const devicesCollection = db.collection('devices');
 
-    const server = http.createServer(app);
+    const server = https.createServer({
+        key: fs.readFileSync("./certs/private.key"),
+        cert: fs.readFileSync("./certs/certificate.crt")
+      }, app);
     const wss = new WebSocket.Server({ server });
 
     wss.on("connection", (ws) => {
@@ -487,14 +491,44 @@ async function startServer() {
                     }
                     break;
                 }
+                case "remote_command": {
+                    const { fromId, toId, command } = data;
+                
+                    const allowedPeers = approvedSessions.get(fromId);
+                    if (!allowedPeers || !allowedPeers.has(toId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent("unknown", fromId, "remote_command", "Unauthorized attempt to send remote command.");
+                        return;
+                    }
+                
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "remote_command",
+                            fromId,
+                            command
+                        }));
+                        logSessionEvent("unknown", toId, "remote_command", `Remote command relayed from ${fromId}.`);
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Target Android device not connected." }));
+                        logSessionEvent("unknown", toId, "remote_command", "Failed to send remote command: device not connected.");
+                    }
+                
+                    break;
+                }                
 
             }
+
         });
 
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
             console.log("Client disconnected");
             console.log("Klijenti: ", clients);
+        });
+        
+        server.listen(443, () => {
+            console.log("HTTPS server running on port 443");
         });
         
     });
