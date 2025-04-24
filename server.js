@@ -527,9 +527,9 @@ async function startServer() {
             console.log("Klijenti: ", clients);
         });
         
-        server.listen(443, () => {
+        /*server.listen(443, () => {
             console.log("HTTPS server running on port 443");
-        });
+        });*/
         
     });
 
@@ -668,6 +668,7 @@ async function startServer() {
 
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
+        console.log("Server listening on port", PORT);
     });
 }
 
