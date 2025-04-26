@@ -1,6 +1,7 @@
 const express = require("express");
 const fs = require("fs");
-const https = require("https");
+//const https = require("https");
+const http = require('http');
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
@@ -205,12 +206,15 @@ async function startServer() {
     const db = await connectDB();
     const devicesCollection = db.collection('devices');
 
-    const server = https.createServer(app);
+    const server = http.createServer(app);
+
+    //const server = https.createServer(app);
 
     /*const server = https.createServer({
         key: fs.readFileSync("./certs/private.key"),
         cert: fs.readFileSync("./certs/certificate.crt")
     }, app);*/
+
 
 
     const wss = new WebSocket.Server({ server });
