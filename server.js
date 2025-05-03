@@ -184,8 +184,8 @@ async function connectToWebAdmin() {
                     }
                     //const { sessionId, x, y, button } = data;
 
-                    const allowedPeers = approvedSessions.get(sessionId);
-                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                    const allowedPeers = approvedSessions.get(toId);
+                    if (!allowedPeers || !allowedPeers.has(toId)) {
                        // ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
                         logSessionEvent(sessionId, toId, "mouse_click", "Unauthorized attempt to send mouse input.");
                         return;
