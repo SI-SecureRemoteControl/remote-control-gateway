@@ -499,7 +499,7 @@ async function startServer() {
                     }
                     break;
                 }
-                case "remote_command": {
+                /*case "remote_command": {
                     const { fromId, toId, command } = data;
 
                     const allowedPeers = approvedSessions.get(fromId);
@@ -523,7 +523,66 @@ async function startServer() {
                     }
 
                     break;
+                }*/
+
+                case "mouse_click": {
+                    const { fromId, toId, x, y, button } = data;
+
+                    const allowedPeers = approvedSessions.get(fromId);
+                    if (!allowedPeers || !allowedPeers.has(toId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        return;
+                    }
+
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            action: "mouse_click",
+                            sessionId: fromId,     
+                            x,
+                            y,
+                            button
+                        }));
+                        logSessionEvent("unknown", toId, "mouse_click", `Mouse click command relayed from ${fromId}.`);
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Target Android device not connected." }));
+                    }
+
+                    break;
                 }
+
+                case "keyboard": {
+                    const { sessionId, key, code, type } = data;
+
+                    // Provjera da li je sesija odobrena između uređaja
+                    const allowedPeers = approvedSessions.get(sessionId);
+                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent(sessionId, sessionId, "keyboard", "Unauthorized attempt to send keyboard input.");
+                        return;
+                    }
+
+                    // Pronalaženje ciljanog uređaja
+                    const target = clients.get(sessionId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        // Slanje poruke ciljanom uređaju
+                        target.send(JSON.stringify({
+                            type: "keyboard",
+                            sessionId,
+                            key,
+                            code,
+                            action: 'keyboard', // Ovo označava da je akcija vezana za tastaturu
+                            type // type može biti 'keydown' ili 'keyup'
+                        }));
+                        logSessionEvent(sessionId, sessionId, "keyboard", `Keyboard input relayed from ${sessionId}.`);
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, sessionId, "keyboard", "Failed to send keyboard input: device not connected.");
+                    }
+
+                    break;
+                }
+
 
             }
 
