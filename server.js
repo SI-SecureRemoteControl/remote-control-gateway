@@ -184,12 +184,13 @@ async function connectToWebAdmin() {
                     }
                     //const { sessionId, x, y, button } = data;
 
-                    const allowedPeers = approvedSessions.get(toId);
+                    /*const allowedPeers = approvedSessions.get(toId);
                     if (!allowedPeers || !allowedPeers.has(toId)) {
                        // ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
                         logSessionEvent(sessionId, toId, "mouse_click", "Unauthorized attempt to send mouse input.");
                         return;
-                    }
+                    }*/
+                    console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
