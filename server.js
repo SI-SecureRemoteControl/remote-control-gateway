@@ -181,6 +181,73 @@ async function connectToWebAdmin() {
                     break;
 
             }
+            switch(data.action){
+                case "mouse_click": {
+                    const { sessionId, x, y, button } = data;
+
+                    const allowedPeers = approvedSessions.get(sessionId);
+                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent(sessionId, sessionId, "mouse_click", "Unauthorized attempt to send mouse input.");
+                        return;
+                    }
+
+                    const target = clients.get(sessionId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "mouse_click",
+                            sessionId,
+                            x,
+                            y,
+                            button
+                        }));
+                        logSessionEvent(sessionId, sessionId, "mouse_click", `Mouse click relayed from ${sessionId}.`);
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, sessionId, "mouse_click", "Failed to send mouse input: device not connected.");
+                    }
+
+                    break;
+                }
+
+
+                case "keyboard": {
+                    const { sessionId, key, code, type } = data;
+
+                    if (!sessionId || !key || !code || !type) {
+                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
+                        break;
+                    }
+
+                    const allowedPeers = approvedSessions.get(sessionId);
+                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent(sessionId, sessionId, "keyboard", "Unauthorized attempt to send keyboard input.");
+                        break;
+                    }
+
+                    const target = clients.get(sessionId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            action: "keyboard",
+                            sessionId,
+                            key,
+                            code,
+                            type  // 'keydown' ili 'keyup' - doslovno kao što frontend šalje
+                        }));
+                        logSessionEvent(sessionId, sessionId, "keyboard", `Keyboard input (${type}) relayed.`);
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, sessionId, "keyboard", "Failed to send keyboard input: device not connected.");
+                    }
+
+                    break;
+                }
+                default:
+                    console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
+                    logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
+                    break;
+            }
 
         } catch (error) {
             console.error('COMM LAYER: Error parsing message from Web Admin WS:', error);
@@ -524,69 +591,6 @@ async function startServer() {
 
                     break;
                 }*/
-            }
-            switch(data.action){
-                case "mouse_click": {
-                    const { sessionId, x, y, button } = data;
-
-                    const allowedPeers = approvedSessions.get(sessionId);
-                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, sessionId, "mouse_click", "Unauthorized attempt to send mouse input.");
-                        return;
-                    }
-
-                    const target = clients.get(sessionId);
-                    if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({
-                            type: "mouse_click",
-                            sessionId,
-                            x,
-                            y,
-                            button
-                        }));
-                        logSessionEvent(sessionId, sessionId, "mouse_click", `Mouse click relayed from ${sessionId}.`);
-                    } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
-                        logSessionEvent(sessionId, sessionId, "mouse_click", "Failed to send mouse input: device not connected.");
-                    }
-
-                    break;
-                }
-
-
-                case "keyboard": {
-                    const { sessionId, key, code, type } = data;
-
-                    if (!sessionId || !key || !code || !type) {
-                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
-                        break;
-                    }
-
-                    const allowedPeers = approvedSessions.get(sessionId);
-                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, sessionId, "keyboard", "Unauthorized attempt to send keyboard input.");
-                        break;
-                    }
-
-                    const target = clients.get(sessionId);
-                    if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({
-                            action: "keyboard",
-                            sessionId,
-                            key,
-                            code,
-                            type  // 'keydown' ili 'keyup' - doslovno kao što frontend šalje
-                        }));
-                        logSessionEvent(sessionId, sessionId, "keyboard", `Keyboard input (${type}) relayed.`);
-                    } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
-                        logSessionEvent(sessionId, sessionId, "keyboard", "Failed to send keyboard input: device not connected.");
-                    }
-
-                    break;
-                }
             }
 
         });
