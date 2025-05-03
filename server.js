@@ -524,7 +524,8 @@ async function startServer() {
 
                     break;
                 }*/
-
+            }
+            switch(data.action){
                 case "mouse_click": {
                     const { sessionId, x, y, button } = data;
 
@@ -586,9 +587,6 @@ async function startServer() {
 
                     break;
                 }
-
-
-
             }
 
         });
