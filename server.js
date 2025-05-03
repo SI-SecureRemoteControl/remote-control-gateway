@@ -174,37 +174,35 @@ async function connectToWebAdmin() {
                     break;
                 }
 
-                // --- Default Case ---
-                default:
-                    console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
-                    logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
-                    break;
-
-            }
-            switch(data.action){
                 case "mouse_click": {
-                    const { sessionId, x, y, button } = data;
+                    const { fromId, toId, sessionId, payload, type } = data;
+
+                    if (!fromId || !toId || !payload) {
+                        console.warn(`COMM LAYER: Received invalid click message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
+                        break;
+                    }
+                    //const { sessionId, x, y, button } = data;
 
                     const allowedPeers = approvedSessions.get(sessionId);
                     if (!allowedPeers || !allowedPeers.has(sessionId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, sessionId, "mouse_click", "Unauthorized attempt to send mouse input.");
+                       // ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent(sessionId, toId, "mouse_click", "Unauthorized attempt to send mouse input.");
                         return;
                     }
 
-                    const target = clients.get(sessionId);
+                    const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({
-                            type: "mouse_click",
-                            sessionId,
-                            x,
-                            y,
-                            button
+                            type: "click",
+                            toId,
+                            fromId,
+                            payload
                         }));
-                        logSessionEvent(sessionId, sessionId, "mouse_click", `Mouse click relayed from ${sessionId}.`);
+                        logSessionEvent(sessionId, toId, "mouse_click", `Mouse clicks on cordinates (${payload.x}, ${payload.y}) sent to device.`);
                     } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
-                        logSessionEvent(sessionId, sessionId, "mouse_click", "Failed to send mouse input: device not connected.");
+                        //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, toId, "mouse_click", "Failed to send mouse input: device not connected.");
                     }
 
                     break;
@@ -212,33 +210,36 @@ async function connectToWebAdmin() {
 
 
                 case "keyboard": {
-                    const { sessionId, key, code, type } = data;
+                    const { fromId, toId, sessionId, payload, type } = data;
 
-                    if (!sessionId || !key || !code || !type) {
-                        ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
+                   //const { sessionId, key, code, type } = data;
+
+                    if (!sessionId || !payload.key || !payload.code || !type) {
+                        //ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
+                        console.warn(`COMM LAYER: Received invalid keyboard message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
                         break;
                     }
 
                     const allowedPeers = approvedSessions.get(sessionId);
                     if (!allowedPeers || !allowedPeers.has(sessionId)) {
                         ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, sessionId, "keyboard", "Unauthorized attempt to send keyboard input.");
+                        logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
                         break;
                     }
 
-                    const target = clients.get(sessionId);
+                    const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({
-                            action: "keyboard",
-                            sessionId,
-                            key,
-                            code,
-                            type  // 'keydown' ili 'keyup' - doslovno kao što frontend šalje
+                            type: "keyboard",
+                            toId,
+                            fromId,
+                            payload
                         }));
-                        logSessionEvent(sessionId, sessionId, "keyboard", `Keyboard input (${type}) relayed.`);
+                        logSessionEvent(sessionId, toId, "keyboard", `Keyboard input (${type}) relayed.`);
                     } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
-                        logSessionEvent(sessionId, sessionId, "keyboard", "Failed to send keyboard input: device not connected.");
+                        //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, toId, "keyboard", "Failed to send keyboard input: device not connected.");
                     }
 
                     break;
