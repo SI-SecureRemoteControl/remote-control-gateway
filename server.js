@@ -19,6 +19,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const setupRoutes = require('./routes');
+
 let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
@@ -182,14 +184,7 @@ async function connectToWebAdmin() {
                         logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
                         break;
                     }
-                    //const { sessionId, x, y, button } = data;
 
-                    /*const allowedPeers = approvedSessions.get(toId);
-                    if (!allowedPeers || !allowedPeers.has(toId)) {
-                       // ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, toId, "mouse_click", "Unauthorized attempt to send mouse input.");
-                        return;
-                    }*/
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
@@ -259,9 +254,7 @@ async function connectToWebAdmin() {
     });
 
     webAdminWs.on('close', () => {
-        // const reasonString = reason ? reason.toString() : 'N/A';
-        //console.log(`!!! COMM LAYER: Web Admin WS Disconnected. Code: ${code}, Reason: ${reasonString}. Retrying in 5s...`); // Enhanced log
-        // Clear listeners to avoid duplicates on retry if needed, although creating a new object handles this.
+ 
         setTimeout(connectToWebAdmin, 5000);
     });
 
@@ -277,12 +270,7 @@ async function startServer() {
 
     const server = http.createServer(app);
 
-    //const server = https.createServer(app);
 
-    /*const server = https.createServer({
-        key: fs.readFileSync("./certs/private.key"),
-        cert: fs.readFileSync("./certs/certificate.crt")
-    }, app);*/
 
 
 
@@ -568,44 +556,14 @@ async function startServer() {
                     }
                     break;
                 }
-                /*case "remote_command": {
-                    const { fromId, toId, command } = data;
-
-                    const allowedPeers = approvedSessions.get(fromId);
-                    if (!allowedPeers || !allowedPeers.has(toId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent("unknown", fromId, "remote_command", "Unauthorized attempt to send remote command.");
-                        return;
-                    }
-
-                    const target = clients.get(toId);
-                    if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({
-                            type: "remote_command",
-                            fromId,
-                            command
-                        }));
-                        logSessionEvent("unknown", toId, "remote_command", `Remote command relayed from ${fromId}.`);
-                    } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Target Android device not connected." }));
-                        logSessionEvent("unknown", toId, "remote_command", "Failed to send remote command: device not connected.");
-                    }
-
-                    break;
-                }*/
             }
 
         });
 
-        // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
             console.log("Client disconnected");
             console.log("Klijenti: ", clients);
         });
-
-        /*server.listen(443, () => {
-            console.log("HTTPS server running on port 443");
-        });*/
 
     });
 
@@ -651,96 +609,7 @@ async function startServer() {
         checkInactiveDevices();
     }, HEARTBEAT_CHECK_INTERVAL);
 
-    // Status endpoint to check server status
-    app.get("/status", (req, res) => {
-        res.json({ status: "Remote Control Gateway is running", connectedClients: clients.size });
-    });
-
-    app.get("/devices/active", async (req, res) => {
-        try {
-
-            const activeDevices = await devicesCollection.find({ status: "active" }).toArray();
-
-            res.json(activeDevices);
-        } catch (error) {
-            console.error("Error fetching active devices:", error);
-            res.status(500).json({ error: "Failed to fetch active devices" });
-        }
-    });
-
-    // Endpoint to get session logs for a specific device
-    app.get("/session/logs/:deviceId", async (req, res) => {
-        const { deviceId } = req.params;
-
-        try {
-            const db = await connectDB();
-            const sessionLogsCollection = db.collection('sessionLogs');
-
-            const logs = await sessionLogsCollection.find({ deviceId }).toArray();
-            res.json(logs);
-        } catch (error) {
-            console.error("Error fetching session logs:", error);
-            res.status(500).json({ error: "Failed to fetch session logs" });
-        }
-    })
-
-    // Deregister device
-    app.post("/devices/deregister", async (req, res) => {
-        const { deviceId, deregistrationKey } = req.body;
-
-        // Validate request payload
-        if (!deviceId || !deregistrationKey) {
-            return res.status(400).json({ error: "Missing required fields: deviceId, deregistrationKey" });
-        }
-
-        try {
-            // Check if the device exists
-            const device = await devicesCollection.findOne({ deviceId });
-            if (!device) {
-                return res.status(404).json({ error: `Device with ID ${deviceId} not found.` });
-            }
-
-            // Validate the deregistration key
-            if (device.deregistrationKey !== deregistrationKey) {
-                return res.status(400).json({ error: "Invalid deregistration key." });
-            }
-
-            // Remove the device from the database
-            await devicesCollection.deleteOne({ deviceId });
-
-            // Optionally remove the device from the WebSocket clients map and disconnect if needed
-            if (clients.has(deviceId)) {
-                const ws = clients.get(deviceId);
-                ws.close();
-                clients.delete(deviceId); // Remove from connected clients
-            }
-
-            console.log(`Device ${deviceId} deregistered and removed from database.`);
-            res.status(200).json({ message: `Device ${deviceId} deregistered successfully and removed from the database.` });
-
-        } catch (error) {
-            console.error("Error during device deregistration:", error);
-            res.status(500).json({ error: "Internal server error. Please try again later." });
-        }
-    });
-
-    //temporary for removing test sessions
-    app.post('/removeSessions', (req, res) => {
-        const { token, deviceId } = req.body;
-
-        if (!token) {
-            return res.status(400).json({ success: false, message: 'Token is required.' });
-        }
-
-        const removedFromSessions = approvedSessions.delete(deviceId);
-        const removedFromActiveSessions = activeSessions.delete(token);
-
-        if (removedFromSessions || removedFromActiveSessions) {
-            return res.status(200).json({ success: true, message: 'Session removed.' });
-        } else {
-            return res.status(404).json({ success: false, message: 'Session not found.' });
-        }
-    });
+    app.use('/', setupRoutes(clients, approvedSessions, activeSessions));
 
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
