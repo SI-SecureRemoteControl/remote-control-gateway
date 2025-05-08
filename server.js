@@ -245,6 +245,40 @@ async function connectToWebAdmin() {
 
                     break;
                 }
+
+                case "swipe": {
+                    const { fromId, toId, sessionId, payload, type } = data;
+                
+                    if (!fromId || !toId || !payload) {
+                        console.warn(`COMM LAYER: Received invalid swipe message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid swipe message received from backend.`);
+                        break;
+                    }
+                
+                    console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
+                
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "swipe",
+                            toId,
+                            fromId,
+                            payload
+                        }));
+                        logSessionEvent(
+                            sessionId, 
+                            toId, 
+                            "swipe", 
+                            `Swipe from (${payload.startX}, ${payload.startY}) to (${payload.endX}, ${payload.endY}) with velocity ${payload.velocity} sent to device.`
+                        );
+                    } else {
+                        //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, toId, "swipe", "Failed to send swipe input: device not connected.");
+                    }
+                
+                    break;
+                }
+                
                 default:
                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
                     logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
