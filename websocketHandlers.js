@@ -1,7 +1,7 @@
 // websocketHandlers.js
 const jwt = require('jsonwebtoken');
 const { verifySessionToken } = require("./utils/authSession");
-const config = require('./config');
+
 
 let devicesCollection;
 

@@ -1,5 +1,5 @@
 const WebSocket = require('ws');
-const config = require('./config');
+
 const {
     handleRequestReceived,
     handleControlDecision,

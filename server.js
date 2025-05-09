@@ -15,7 +15,7 @@ const {
     handleDeviceDisconnect,
     handleSessionRequest,
     handleSessionFinalConfirmation
-} = require('/websocketHandlers');
+} = require('./websocketHandlers');
 
 const activeSessions = new Map();
 const approvedSessions = new Map();
@@ -148,10 +148,7 @@ startServer().catch((err) => {
     process.exit(1); // Exit the process if there is an error
 });
 
-connectToWebAdmin().catch((err) => {
-    console.error("Error connecting to web admin:", err);
-    process.exit(1); // Exit the process if there is an error
-});
+
 
 
 
