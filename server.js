@@ -224,7 +224,7 @@ async function connectToWebAdmin() {
 
                     const allowedPeers = approvedSessions.get(sessionId);
                     if (!allowedPeers || !allowedPeers.has(sessionId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
                         logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
                         break;
                     }
