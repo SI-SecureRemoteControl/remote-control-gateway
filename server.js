@@ -222,12 +222,14 @@ async function connectToWebAdmin() {
                         break;
                     }
 
-                    const allowedPeers = approvedSessions.get(sessionId);
+                   /* const allowedPeers = approvedSessions.get(sessionId);
                     if (!allowedPeers || !allowedPeers.has(sessionId)) {
                         //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
                         logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
                         break;
                     }
+*/
+                    console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
