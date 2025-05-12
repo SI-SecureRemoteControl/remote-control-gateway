@@ -1,5 +1,7 @@
 const express = require("express");
-const http = require("http");
+const fs = require("fs");
+//const https = require("https");
+const http = require('http');
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
@@ -46,29 +48,29 @@ async function connectToWebAdmin() {
     });
 
     webAdminWs.on('message', (message) => {
-        try { 
+        try {
             const data = JSON.parse(message);
             console.log('\nCOMM LAYER: Received message from Web Admin WS:', data);
-    
-            switch (data.type) { 
+
+            switch (data.type) {
                 case "request_received":
                     console.log(`COMM LAYER: Backend acknowledged request for session ${data.sessionId}`);
                     logSessionEvent(data.sessionId, activeSessions.get(data.sessionId), data.type, "Backend acknowledged request for session.");
-                    break; 
-    
+                    break;
+
                 case "control_decision":
                     console.log("COMM LAYER: Processing control_decision from Backend.");
                     const { sessionId: decisionSessionId, decision, reason } = data;
                     const deviceId = activeSessions.get(decisionSessionId);
-    
+
                     if (!deviceId) {
                         console.error(`COMM LAYER: Received control_decision for session ${decisionSessionId}, but couldn't find deviceId in activeSessions.`);
                         logSessionEvent(decisionSessionId, 'unknown', data.type, `Failed: Could not find active device for session.`);
-                        return; 
+                        return;
                     }
-    
+
                     console.log(`COMM LAYER: Found deviceId ${deviceId} for session ${decisionSessionId}. Decision: ${decision}`);
-    
+
                     if (decision === "accepted") {
                         console.log(`COMM LAYER: Sending 'approved' message to device ${deviceId}`);
                         sendToDevice(deviceId, {
@@ -77,58 +79,58 @@ async function connectToWebAdmin() {
                             message: "Admin approved the session request."
                         });
                         logSessionEvent(decisionSessionId, deviceId, data.type, "Session approved by backend.");
-    
+
                         if (!approvedSessions.has(deviceId)) {
                             approvedSessions.set(deviceId, new Set());
                         }
                         approvedSessions.get(deviceId).add("web-admin"); // Assuming "web-admin" is the peer identifier
-    
-                    } else { 
+
+                    } else {
                         console.log(`COMM LAYER: Sending 'rejected' message to device ${deviceId}`);
-                         sendToDevice(deviceId, {
-                             type: "rejected", 
-                             sessionId: decisionSessionId, 
-                             message: `Admin rejected the session request. Reason: ${reason || 'N/A'}`
-                         });
-                         logSessionEvent(decisionSessionId, deviceId, data.type, `Session rejected by backend. Reason: ${reason || 'N/A'}`);
-                         activeSessions.delete(decisionSessionId); 
-                         const deviceApprovedPeers = approvedSessions.get(deviceId);
-                          if (deviceApprovedPeers) {
-                              deviceApprovedPeers.delete("web-admin"); // Remove potential peer added optimistically
-                              if (deviceApprovedPeers.size === 0) {
-                                  approvedSessions.delete(deviceId);
-                              }
-                          }
+                        sendToDevice(deviceId, {
+                            type: "rejected",
+                            sessionId: decisionSessionId,
+                            message: `Admin rejected the session request. Reason: ${reason || 'N/A'}`
+                        });
+                        logSessionEvent(decisionSessionId, deviceId, data.type, `Session rejected by backend. Reason: ${reason || 'N/A'}`);
+                        activeSessions.delete(decisionSessionId);
+                        const deviceApprovedPeers = approvedSessions.get(deviceId);
+                        if (deviceApprovedPeers) {
+                            deviceApprovedPeers.delete("web-admin"); // Remove potential peer added optimistically
+                            if (deviceApprovedPeers.size === 0) {
+                                approvedSessions.delete(deviceId);
+                            }
+                        }
                     }
-                    break; 
-    
+                    break;
+
                 // --- NEW CASE FOR SESSION TERMINATION ---
-                case "session_terminated": { 
+                case "session_terminated": {
                     console.log(`COMM LAYER: Processing session_terminated for session ${data.sessionId}`);
                     const { sessionId: terminatedSessionId, reason } = data;
-    
+
 
                     let deviceIdForTermination = activeSessions.get(terminatedSessionId);
-    
+
                     if (!deviceIdForTermination) {
                         console.warn(`COMM LAYER: Received termination for session ${terminatedSessionId}, but couldn't map it back to a deviceId in activeSessions. Ignoring notification to device, but cleaning up.`);
                         logSessionEvent(terminatedSessionId, 'unknown', data.type, `Termination received, but device mapping lost. Reason: ${reason || 'N/A'}`);
                         activeSessions.delete(terminatedSessionId); // Attempt cleanup anyway
-                        return; 
+                        return;
                     }
-    
+
                     console.log(`COMM LAYER: Found deviceId ${deviceIdForTermination} for terminated session ${terminatedSessionId}. Reason: ${reason}`);
                     logSessionEvent(terminatedSessionId, deviceIdForTermination, data.type, `Session terminated by backend. Reason: ${reason || 'N/A'}`);
-    
+
                     // --- Cleanup Logic ---
                     activeSessions.delete(terminatedSessionId);
                     console.log(`COMM LAYER: Deleted session ${terminatedSessionId} from activeSessions due to termination.`);
-    
+
                     const deviceApprovedPeers = approvedSessions.get(deviceIdForTermination);
                     if (deviceApprovedPeers) {
                         const deleted = deviceApprovedPeers.delete("web-admin"); // Peer identifier
                         if (deleted) console.log(`COMM LAYER: Removed 'web-admin' peer from approvedSessions for device ${deviceIdForTermination}.`);
-    
+
                         if (deviceApprovedPeers.size === 0) {
                             approvedSessions.delete(deviceIdForTermination);
                             console.log(`COMM LAYER: Removed device ${deviceIdForTermination} from approvedSessions as no peers remain.`);
@@ -136,7 +138,7 @@ async function connectToWebAdmin() {
                     } else {
                         console.log(`COMM LAYER: Device ${deviceIdForTermination} not found in approvedSessions during termination cleanup (might be normal).`);
                     }
-    
+
                     // --- Notify Device ---
                     console.log(`COMM LAYER: Sending 'session_ended' message to device ${deviceIdForTermination}`);
                     sendToDevice(deviceIdForTermination, {
@@ -144,48 +146,153 @@ async function connectToWebAdmin() {
                         sessionId: terminatedSessionId,
                         reason: reason || 'terminated_by_admin'
                     });
-                    break; 
-                } 
-    
+                    break;
+                }
+
                 // --- WebRTC Signaling Cases ---
                 case "offer":
                 case "answer":
-                case "ice-candidate": { 
+                case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
-    
+
                     if (!fromId || !toId || !payload) {
                         console.warn(`COMM LAYER: Received invalid signaling message (${type}). Missing fields. Data:`, data);
                         logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
-                        break; 
+                        break;
                     }
-    
+
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
                     const target = clients.get(toId);
-    
+
                     if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({ type, fromId, toId, payload })); 
+                        target.send(JSON.stringify({ type, fromId, toId, payload }));
                         logSessionEvent(data.sessionId || 'unknown', toId, type, `Relayed from backend peer ${fromId}.`);
                     } else {
                         console.warn(`COMM LAYER: Target device ${toId} for ${type} not found or not connected.`);
                         logSessionEvent(data.sessionId || 'unknown', toId, type, `Failed relay to device (not found/connected). From: ${fromId}`);
                     }
-                    break; 
-                } 
-    
-                // --- Default Case ---
+                    break;
+                }
+
+                case "mouse_click": {
+                    const { fromId, toId, sessionId, payload, type } = data;
+
+                    if (!fromId || !toId || !payload) {
+                        console.warn(`COMM LAYER: Received invalid click message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
+                        break;
+                    }
+                    //const { sessionId, x, y, button } = data;
+
+                    /*const allowedPeers = approvedSessions.get(toId);
+                    if (!allowedPeers || !allowedPeers.has(toId)) {
+                       // ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent(sessionId, toId, "mouse_click", "Unauthorized attempt to send mouse input.");
+                        return;
+                    }*/
+                    console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
+
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "click",
+                            toId,
+                            fromId,
+                            payload
+                        }));
+                        logSessionEvent(sessionId, toId, "mouse_click", `Mouse clicks on cordinates (${payload.x}, ${payload.y}) sent to device.`);
+                    } else {
+                        //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, toId, "mouse_click", "Failed to send mouse input: device not connected.");
+                    }
+
+                    break;
+                }
+
+
+                case "keyboard": {
+                    const { fromId, toId, sessionId, payload, type } = data;
+
+                   //const { sessionId, key, code, type } = data;
+
+                    if (!sessionId || !payload.key || !payload.code || !type) {
+                        //ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
+                        console.warn(`COMM LAYER: Received invalid keyboard message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
+                        break;
+                    }
+
+                   /* const allowedPeers = approvedSessions.get(sessionId);
+                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                        //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
+                        break;
+                    }
+*/
+                    console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
+
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "keyboard",
+                            toId,
+                            fromId,
+                            payload
+                        }));
+                        logSessionEvent(sessionId, toId, "keyboard", `Keyboard input (${type}) relayed.`);
+                    } else {
+                        //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, toId, "keyboard", "Failed to send keyboard input: device not connected.");
+                    }
+
+                    break;
+                }
+
+                case "swipe": {
+                    const { fromId, toId, sessionId, payload, type } = data;
+                
+                    if (!fromId || !toId || !payload) {
+                        console.warn(`COMM LAYER: Received invalid swipe message (${type}). Missing fields. Data:`, data);
+                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid swipe message received from backend.`);
+                        break;
+                    }
+                
+                    console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
+                
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "swipe",
+                            toId,
+                            fromId,
+                            payload
+                        }));
+                        logSessionEvent(
+                            sessionId, 
+                            toId, 
+                            "swipe", 
+                            `Swipe from (${payload.startX}, ${payload.startY}) to (${payload.endX}, ${payload.endY}) with velocity ${payload.velocity} sent to device.`
+                        );
+                    } else {
+                        //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
+                        logSessionEvent(sessionId, toId, "swipe", "Failed to send swipe input: device not connected.");
+                    }
+                
+                    break;
+                }
+                
                 default:
-                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
-                     logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
-                     break;
-    
-            } 
-    
-        } catch (error) { 
+                    console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
+                    logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
+                    break;
+            }
+
+        } catch (error) {
             console.error('COMM LAYER: Error parsing message from Web Admin WS:', error);
             console.error('COMM LAYER: Raw message was:', message.toString ? message.toString() : message);
-        } 
-    
-    });  
+        }
+
+    });
 
     webAdminWs.on('close', () => {
         // const reasonString = reason ? reason.toString() : 'N/A';
@@ -205,6 +312,16 @@ async function startServer() {
     const devicesCollection = db.collection('devices');
 
     const server = http.createServer(app);
+
+    //const server = https.createServer(app);
+
+    /*const server = https.createServer({
+        key: fs.readFileSync("./certs/private.key"),
+        cert: fs.readFileSync("./certs/certificate.crt")
+    }, app);*/
+
+
+
     const wss = new WebSocket.Server({ server });
 
     wss.on("connection", (ws) => {
@@ -226,7 +343,7 @@ async function startServer() {
                     // Validate request payload
                     if (!deviceId || !registrationKey) {
                         ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId and/or registrationKey" }));
-                       // return;
+                        // return;
                     }
 
                     // Find device using this registrationKey
@@ -234,13 +351,13 @@ async function startServer() {
                     if (!existingDevice) {
                         // If that device doesn't exist in DB, given registrationKey is invalid
                         ws.send(JSON.stringify({ type: "error", message: `Device with registration key ${registrationKey} doesn't exist.` }));
-                       // return;
+                        // return;
                     }
 
                     // If the registrationKey is used by another device, prevent hijack (switching devices)
                     if (existingDevice.deviceId && existingDevice.deviceId !== deviceId) {
                         ws.send(JSON.stringify({ type: "error", message: `Registration key ${registrationKey} is already assigned to another device.` }));
-                      //  return;
+                        //  return;
                     }
 
                     // Create device data with mandatory fields
@@ -447,12 +564,12 @@ async function startServer() {
                 case "answer":
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
-                
+
                     // Ako je cilj Web Admin, šaljemo Web Adminu
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
                     }
-                
+
                     // Ako je cilj drugi uređaj, šaljemo preko clients WS
                     const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
@@ -461,23 +578,23 @@ async function startServer() {
                         console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
                     }
                     break;
-                    }
-                        
-                    
-        
+                }
+
+
+
 
                 case "offer":
                 case "answer":
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
-                
-                    const isFromAndroid = clients.get(fromId);   
+
+                    const isFromAndroid = clients.get(fromId);
 
                     if (isFromAndroid && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
                         break;
                     }
-                    
+
                     const target = clients.get(toId);
 
                     if (target && target.readyState === WebSocket.OPEN) {
@@ -487,8 +604,33 @@ async function startServer() {
                     }
                     break;
                 }
+                /*case "remote_command": {
+                    const { fromId, toId, command } = data;
 
+                    const allowedPeers = approvedSessions.get(fromId);
+                    if (!allowedPeers || !allowedPeers.has(toId)) {
+                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                        logSessionEvent("unknown", fromId, "remote_command", "Unauthorized attempt to send remote command.");
+                        return;
+                    }
+
+                    const target = clients.get(toId);
+                    if (target && target.readyState === WebSocket.OPEN) {
+                        target.send(JSON.stringify({
+                            type: "remote_command",
+                            fromId,
+                            command
+                        }));
+                        logSessionEvent("unknown", toId, "remote_command", `Remote command relayed from ${fromId}.`);
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Target Android device not connected." }));
+                        logSessionEvent("unknown", toId, "remote_command", "Failed to send remote command: device not connected.");
+                    }
+
+                    break;
+                }*/
             }
+
         });
 
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
@@ -496,7 +638,11 @@ async function startServer() {
             console.log("Client disconnected");
             console.log("Klijenti: ", clients);
         });
-        
+
+        /*server.listen(443, () => {
+            console.log("HTTPS server running on port 443");
+        });*/
+
     });
 
     // Periodically check for devices that are inactive for too long
@@ -527,7 +673,7 @@ async function startServer() {
                         }
                     );
 
-                //    clients.delete(deviceId); // Remove from connected clients
+                    //    clients.delete(deviceId); // Remove from connected clients
                     lastHeartbeat.delete(deviceId); // Remove from heartbeat map
                     try {
                         ws.close(); // Close socket connection if still open
@@ -617,14 +763,14 @@ async function startServer() {
     //temporary for removing test sessions
     app.post('/removeSessions', (req, res) => {
         const { token, deviceId } = req.body;
-    
+
         if (!token) {
             return res.status(400).json({ success: false, message: 'Token is required.' });
         }
-    
+
         const removedFromSessions = approvedSessions.delete(deviceId);
         const removedFromActiveSessions = activeSessions.delete(token);
-    
+
         if (removedFromSessions || removedFromActiveSessions) {
             return res.status(200).json({ success: true, message: 'Session removed.' });
         } else {
@@ -634,6 +780,7 @@ async function startServer() {
 
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
+        console.log("Server listening on port", PORT);
     });
 }
 
@@ -647,3 +794,7 @@ connectToWebAdmin().catch((err) => {
     console.error("Error connecting to web admin:", err);
     process.exit(1); // Exit the process if there is an error
 });
+
+
+
+
