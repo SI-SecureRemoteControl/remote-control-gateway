@@ -10,6 +10,7 @@ const { verifySessionToken } = require("./utils/authSession");
 const cors = require("cors");
 const dotenv = require('dotenv');
 const { logSessionEvent } = require("./utils/sessionLogger");
+const archiver = require("archiver");
 dotenv.config();
 
 const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
@@ -976,69 +977,63 @@ async function startServer() {
 
     //sprint 7
 
+    // ─── POST /api/upload ───────────────────────────
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         try {
-            const { deviceId, sessionId, path: basePath } = req.body;
-            const files = req.files;
-    
-            // ✅ Validacija ulaza
-            if (!deviceId || !sessionId || !basePath || !files?.length) {
-                return res.status(400).json({ error: "Missing required fields." });
-            }
-    
-            // 🧼 Očisti sessionId da bude safe za ime fajla
-            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-    
-            // 📁 Privremeni folder za ovu sesiju
-            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-            fs.mkdirSync(sessionFolder, { recursive: true });
-    
-            // 📄 Rasporedi fajlove u strukturu (koristi originalni `originalname`)
-            for (const file of files) {
-                const relativePath = file.originalname;
-                const destPath = path.join(sessionFolder, basePath, relativePath);
-                fs.mkdirSync(path.dirname(destPath), { recursive: true });
-                fs.renameSync(file.path, destPath);
-            }
-    
-            // 🗜️ Kreiraj ZIP
-            const zipName = `upload-${safeSessionId}.zip`;
-            const zipPath = path.join(UPLOAD_DIR, zipName);
-    
-            await new Promise((resolve, reject) => {
-                const output = fs.createWriteStream(zipPath);
-                const archive = archiver("zip", { zlib: { level: 9 } });
-    
-                output.on("close", resolve);
-                archive.on("error", reject);
-    
-                archive.pipe(output);
-                archive.directory(sessionFolder, false);
-                archive.finalize();
-            });
-    
-            // 🧹 Očisti privremeni folder (ostaje samo ZIP)
-            fs.rmSync(sessionFolder, { recursive: true, force: true });
-    
-            // 🔗 Generiši URL (prilagodi svoju Railway domenu)
-            const downloadUrl = `https://your-app.up.railway.app/uploads/${zipName}`;
-    
-            // 📡 Pošalji WebSocket poruku Android uređaju
-            sendToDevice(deviceId, {
-                type: "upload_files",
-                deviceId,
-                sessionId,
-                downloadUrl
-            });
-    
-            // ✅ Odgovori web klijentu
-            res.status(200).json({ message: "Upload complete. Android notified." });
-    
-        } catch (err) {
-            console.error("Upload error:", err);
-            res.status(500).json({ error: "Internal server error." });
+        const { deviceId, sessionId, path: basePath } = req.body;
+        const files = req.files;
+        if (!deviceId || !sessionId || !basePath || !files?.length) {
+            return res.status(400).json({ error: "Missing required fields." });
         }
-    });
+
+        const cleanBase = basePath.replace(/^\/+/, "");
+        const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+        const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+        await fs.promises.mkdir(sessionFolder, { recursive: true });
+
+        for (const f of files) {
+            const dest = path.join(sessionFolder, cleanBase, f.originalname);
+            await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+            await fs.promises.rename(f.path, dest);
+        }
+
+        const zipName = `upload-${safeSessionId}.zip`;
+        const zipPath = path.join(UPLOAD_DIR, zipName);
+
+        await new Promise((resolve, reject) => {
+            const output  = fs.createWriteStream(zipPath);
+            const archive = archiver("zip", { zlib: { level: 9 } });
+
+            output.on("close", resolve);
+            archive.on("error", reject);
+
+            archive.pipe(output);
+            archive.directory(sessionFolder, false);
+            archive.finalize();
+        });
+
+        await fs.promises.rm(sessionFolder, { recursive: true, force: true });
+
+        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+
+        sendToDevice(deviceId, {
+            type:       "upload_files",
+            deviceId,
+            sessionId,
+            downloadUrl,
+            remotePath: cleanBase           // <── Android zna gdje raspakirati
+        });
+
+        return res.json({ message: "Upload complete. Android notified.", downloadUrl });
+
+        } catch (err) {
+        console.error("Upload error:", err);
+        return res.status(500).json({ error: "Internal server error." });
+        }
+
+    }
+    );
+
     
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
     app.use("/uploads", express.static(UPLOAD_DIR));
