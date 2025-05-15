@@ -1014,7 +1014,7 @@ async function startServer() {
 
         await fs.promises.rm(sessionFolder, { recursive: true, force: true });
 
-        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+        const downloadUrl = `https://remote-contro-gateway-production.up.railway.app/uploads/${zipName}`;
 
         sendToDevice(deviceId, {
             type:       "upload_files",
@@ -1046,12 +1046,6 @@ async function startServer() {
 
     });
 
-    app.get("/debug/uploads", (req, res) => {
-  fs.readdir(UPLOAD_DIR, (err, files) => {
-    if (err) return res.status(500).json({ err: err.message });
-    res.json(files);
-  });
-});
 
 
 
