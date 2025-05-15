@@ -1046,6 +1046,14 @@ async function startServer() {
 
     });
 
+    app.get("/debug/uploads", (req, res) => {
+  fs.readdir(UPLOAD_DIR, (err, files) => {
+    if (err) return res.status(500).json({ err: err.message });
+    res.json(files);
+  });
+});
+
+
 
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
