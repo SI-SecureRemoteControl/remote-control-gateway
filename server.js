@@ -24,8 +24,8 @@ app.use(express.json());
 
 
 //sprint 7
-const UPLOAD_DIR = path.join(__dirname, "uploads");
-const TEMP_DIR = path.join(__dirname, "temp_uploads");
+const UPLOAD_DIR = path.join(__dirname, "/tmp/uploads");
+const TEMP_DIR = path.join(__dirname, "/tmp/temp_uploads");
 
 // 🛠️ Kreiraj direktorije ako ne postoje (kod će ih kreirati automatski pri startu)
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
