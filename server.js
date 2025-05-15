@@ -290,8 +290,8 @@ async function connectToWebAdmin() {
 
 
                 //sprint 7
-                case "desicion_fileshare":{
-                    console.log("COMM LAYER: Processing desicion_fileshare from Backend.");
+                case "decision_fileshare":{
+                    console.log("COMM LAYER: Processing decision_fileshare from Backend.");
                     const { sessionId: decisionSessionId, decision } = data;
                     const deviceId = activeSessions.get(decisionSessionId);
                     
