@@ -1046,6 +1046,12 @@ async function startServer() {
 
     });
 
+    app.get("/uploads/:file", (req,res)=>{
+  const fp = path.join(UPLOAD_DIR, req.params.file);
+  return fs.existsSync(fp) ? res.download(fp) : res.status(404).send("File not found");
+});
+
+
 
 
 
