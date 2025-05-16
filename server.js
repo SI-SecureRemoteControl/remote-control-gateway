@@ -999,47 +999,22 @@ async function startServer() {
             await fs.promises.rename(f.path, dest);
         }
 
-        const timestamp = Date.now();
-        const zipBase = `upload-${deviceId}-${timestamp}`;
-        const zipName = `${zipBase}.zip`;
-        const zipPath = path.join(UPLOAD_DIR, zipName);
-
-        const output = fs.createWriteStream(zipPath);
-        const archive = archiver("zip", { zlib: { level: 9 } });
-
-        archive.on("error", err => { throw err });
-        archive.pipe(output);
-
-        if (uploadType === "folder" && folderName) {
-            const targetPath = path.join(sessionFolder, cleanBase);
-            archive.directory(targetPath, path.join(zipBase, folderName));
-        } else {
-            const targetPath = path.join(sessionFolder, cleanBase);
-            archive.directory(targetPath, zipBase);
-        }
-
-        await archive.finalize();
-        await new Promise(resolve => output.on("close", resolve));
-
-        await fs.promises.rm(sessionFolder, { recursive: true, force: true });
-
-        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
-
+        // Just return success, no zip processing
         sendToDevice(deviceId, {
             type:       "upload_files",
             deviceId,
             sessionId,
-            downloadUrl,
             remotePath: cleanBase
         });
 
-        return res.json({ message: "Upload complete. Android notified.", downloadUrl });
+        return res.json({ message: "Upload complete. Android notified." });
 
     } catch (err) {
         console.error("Upload error:", err);
         return res.status(500).json({ error: "Internal server error." });
     }
 });
+
 
     
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
