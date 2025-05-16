@@ -992,6 +992,7 @@ async function startServer() {
         const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
         await fs.promises.mkdir(sessionFolder, { recursive: true });
 
+        // 📥 Premještaj fajlova u privremeni direktorij
         for (const f of files) {
             const relativePath = f.originalname;
             const dest = path.join(sessionFolder, cleanBase, relativePath);
@@ -1000,33 +1001,59 @@ async function startServer() {
         }
 
         const timestamp = Date.now();
+
+        // ✅ Ako je jedan fajl i nije folder upload – direktno šalji bez ZIP-a
+        if (uploadType === "files" && files.length === 1) {
+            const singleFile = files[0];
+            const originalName = singleFile.originalname;
+            const finalPath = path.join(UPLOAD_DIR, `${deviceId}-${timestamp}-${originalName}`);
+
+            const src = path.join(sessionFolder, cleanBase, originalName);
+            await fs.promises.rename(src, finalPath);
+            await fs.promises.rm(sessionFolder, { recursive: true, force: true });
+
+            const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${path.basename(finalPath)}`;
+
+            sendToDevice(deviceId, {
+                type: "upload_files",
+                deviceId,
+                sessionId,
+                downloadUrl,
+                remotePath: cleanBase,
+                single: true
+            });
+
+            return res.json({ message: "Single file uploaded.", downloadUrl });
+        }
+
+        // 📦 ZIP za više fajlova ili folder
         const zipBase = `upload-${deviceId}-${timestamp}`;
         const zipName = `${zipBase}.zip`;
         const zipPath = path.join(UPLOAD_DIR, zipName);
-
         const output = fs.createWriteStream(zipPath);
         const archive = archiver("zip", { zlib: { level: 9 } });
 
         archive.on("error", err => { throw err });
         archive.pipe(output);
 
+        const targetPath = path.join(sessionFolder, cleanBase);
+
         if (uploadType === "folder" && folderName) {
-            const targetPath = path.join(sessionFolder, cleanBase);
+            // ZIP sadržaj: /upload-xyz/folderName/...
             archive.directory(targetPath, path.join(zipBase, folderName));
         } else {
-            const targetPath = path.join(sessionFolder, cleanBase);
+            // ZIP sadržaj: /upload-xyz/...
             archive.directory(targetPath, zipBase);
         }
 
         await archive.finalize();
         await new Promise(resolve => output.on("close", resolve));
-
         await fs.promises.rm(sessionFolder, { recursive: true, force: true });
 
         const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
 
         sendToDevice(deviceId, {
-            type:       "upload_files",
+            type: "upload_files",
             deviceId,
             sessionId,
             downloadUrl,
