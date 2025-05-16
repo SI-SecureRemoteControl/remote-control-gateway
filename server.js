@@ -978,10 +978,7 @@ async function startServer() {
     //sprint 7
 
     // ─── POST /api/upload ───────────────────────────
-    const multer = require("multer");
-const upload = multer({ dest: UPLOAD_DIR });
-
-app.post("/api/upload", upload.array("files[]"), async (req, res) => {
+    app.post("/api/upload", upload.array("files[]"), async (req, res) => {
     try {
         const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
         const files = req.files;
@@ -992,29 +989,6 @@ app.post("/api/upload", upload.array("files[]"), async (req, res) => {
 
         const cleanBase = basePath.replace(/^\/+/g, "");
         const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-
-        // 🎯 1. Ako uploadType === 'zip', primi već ZIP-ovan fajl
-        if (uploadType === "zip" && files.length === 1 && files[0].originalname.endsWith(".zip")) {
-            const timestamp = Date.now();
-            const zipName = `upload-${deviceId}-${timestamp}.zip`;
-            const targetPath = path.join(UPLOAD_DIR, zipName);
-
-            await fs.promises.rename(files[0].path, targetPath);
-
-            const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
-
-            sendToDevice(deviceId, {
-                type:       "upload_files",
-                deviceId,
-                sessionId,
-                downloadUrl,
-                remotePath: cleanBase
-            });
-
-            return res.json({ message: "Pre-zipped file received. Android notified.", downloadUrl });
-        }
-
-        // 🎯 2. Ako je običan upload fajlova (tip: 'files' ili 'folder')
         const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
         await fs.promises.mkdir(sessionFolder, { recursive: true });
 
@@ -1036,10 +1010,11 @@ app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         archive.on("error", err => { throw err });
         archive.pipe(output);
 
-        const targetPath = path.join(sessionFolder, cleanBase);
         if (uploadType === "folder" && folderName) {
+            const targetPath = path.join(sessionFolder, cleanBase);
             archive.directory(targetPath, path.join(zipBase, folderName));
         } else {
+            const targetPath = path.join(sessionFolder, cleanBase);
             archive.directory(targetPath, zipBase);
         }
 
@@ -1065,7 +1040,6 @@ app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         return res.status(500).json({ error: "Internal server error." });
     }
 });
-
 
     
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
