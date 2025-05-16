@@ -997,7 +997,8 @@ async function startServer() {
             await fs.promises.rename(f.path, dest);
         }
 
-        const zipName = `upload-${safeSessionId}.zip`;
+        const timestamp = Date.now();
+        const zipName = `upload-${deviceId}-${timestamp}.zip`;
         const zipPath = path.join(UPLOAD_DIR, zipName);
 
         await new Promise((resolve, reject) => {
@@ -1008,7 +1009,7 @@ async function startServer() {
             archive.on("error", reject);
 
             archive.pipe(output);
-            archive.directory(sessionFolder, false);
+            archive.directory(sessionFolder, zipName.replace(/\.zip$/, ''));
             archive.finalize();
         });
 
