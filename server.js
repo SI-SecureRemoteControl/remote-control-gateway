@@ -998,7 +998,8 @@ async function startServer() {
         }
 
         const timestamp = Date.now();
-        const zipName = `upload-${deviceId}-${timestamp}.zip`;
+        const zipBase = `upload-${deviceId}-${timestamp}`;
+        const zipName = `${zipBase}.zip`;
         const zipPath = path.join(UPLOAD_DIR, zipName);
 
         await new Promise((resolve, reject) => {
@@ -1009,9 +1010,10 @@ async function startServer() {
             archive.on("error", reject);
 
             archive.pipe(output);
-            archive.directory(sessionFolder, zipName.replace(/\.zip$/, ''));
+            archive.directory(sessionFolder, zipBase); // 👈 ovo je folder unutar ZIP
             archive.finalize();
         });
+
 
         await fs.promises.rm(sessionFolder, { recursive: true, force: true });
 
