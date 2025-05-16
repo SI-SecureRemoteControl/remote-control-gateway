@@ -979,20 +979,22 @@ async function startServer() {
 
     // ─── POST /api/upload ───────────────────────────
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
-        try {
-        const { deviceId, sessionId, path: basePath } = req.body;
+    try {
+        const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
         const files = req.files;
-        if (!deviceId || !sessionId || !basePath || !files?.length) {
+
+        if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
             return res.status(400).json({ error: "Missing required fields." });
         }
 
-        const cleanBase = basePath.replace(/^\/+/, "");
+        const cleanBase = basePath.replace(/^\/+/g, "");
         const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
         const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
         await fs.promises.mkdir(sessionFolder, { recursive: true });
 
         for (const f of files) {
-            const dest = path.join(sessionFolder, cleanBase, f.originalname);
+            const relativePath = f.originalname;
+            const dest = path.join(sessionFolder, cleanBase, relativePath);
             await fs.promises.mkdir(path.dirname(dest), { recursive: true });
             await fs.promises.rename(f.path, dest);
         }
@@ -1001,21 +1003,23 @@ async function startServer() {
         const zipBase = `upload-${deviceId}-${timestamp}`;
         const zipName = `${zipBase}.zip`;
         const zipPath = path.join(UPLOAD_DIR, zipName);
-        const myFolderPath = path.join(sessionFolder, cleanBase); // cleanBase = MyFolder
 
-        await new Promise((resolve, reject) => {
-            const output  = fs.createWriteStream(zipPath);
-            const archive = archiver("zip", { zlib: { level: 9 } });
+        const output = fs.createWriteStream(zipPath);
+        const archive = archiver("zip", { zlib: { level: 9 } });
 
-            output.on("close", resolve);
-            archive.on("error", reject);
+        archive.on("error", err => { throw err });
+        archive.pipe(output);
 
-            archive.pipe(output);
-            archive.directory(myFolderPath, zipBase); // Direktno sadržaj iz MyFolder -> folder sa imenom ZIP-a
-            archive.finalize();
-        });
+        if (uploadType === "folder" && folderName) {
+            const targetPath = path.join(sessionFolder, cleanBase);
+            archive.directory(targetPath, path.join(zipBase, folderName));
+        } else {
+            const targetPath = path.join(sessionFolder, cleanBase);
+            archive.directory(targetPath, zipBase);
+        }
 
-
+        await archive.finalize();
+        await new Promise(resolve => output.on("close", resolve));
 
         await fs.promises.rm(sessionFolder, { recursive: true, force: true });
 
@@ -1026,18 +1030,16 @@ async function startServer() {
             deviceId,
             sessionId,
             downloadUrl,
-            remotePath: cleanBase           // <── Android zna gdje raspakirati
+            remotePath: cleanBase
         });
 
         return res.json({ message: "Upload complete. Android notified.", downloadUrl });
 
-        } catch (err) {
+    } catch (err) {
         console.error("Upload error:", err);
         return res.status(500).json({ error: "Internal server error." });
-        }
-
     }
-    );
+});
 
     
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
