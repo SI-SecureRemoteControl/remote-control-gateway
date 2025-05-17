@@ -377,7 +377,10 @@ async function connectToWebAdmin() {
                         type: "download_request",
                         deviceId,
                         sessionId,
-                        [paths]
+                        paths: paths.map(path => ({
+                            name: path.name,
+                            type: path.type
+                        }))
                     });
                     console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
 
@@ -865,7 +868,7 @@ async function startServer() {
                         } catch (err) {
                             console.error("Greška pri brisanju fajlova iz UPLOAD_DIR:", err);
                         }
-                    
+
 
                         // Notify the device we forwarded the upload status
                         ws.send(JSON.stringify({ type: "info", message: "Upload_status forwarded to Web Admin.", sessionId: tokenn }));
@@ -874,7 +877,7 @@ async function startServer() {
                         logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
                     }
 
-                    
+
 
                     break;
 
@@ -1105,68 +1108,68 @@ async function startServer() {
     //sprint 7
 
     // ─── POST /api/upload ───────────────────────────
-   /* app.post("/api/upload", upload.array("files[]"), async (req, res) => {
-        try {
-            const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
-            const files = req.files;
-
-            if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
-                return res.status(400).json({ error: "Missing required fields." });
-            }
-
-            const cleanBase = basePath.replace(/^\/+/g, "");
-            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-            await fs.promises.mkdir(sessionFolder, { recursive: true });
-
-            for (const f of files) {
-                const relativePath = f.originalname;
-                const dest = path.join(sessionFolder, cleanBase, relativePath);
-                await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-                await fs.promises.rename(f.path, dest);
-            }
-
-            const timestamp = Date.now();
-            const zipBase = `upload-${deviceId}-${timestamp}`;
-            const zipName = `${zipBase}.zip`;
-            const zipPath = path.join(UPLOAD_DIR, zipName);
-
-            const output = fs.createWriteStream(zipPath);
-            const archive = archiver("zip", { zlib: { level: 9 } });
-
-            archive.on("error", err => { throw err });
-            archive.pipe(output);
-
-            if (uploadType === "folder" && folderName) {
-                const targetPath = path.join(sessionFolder, cleanBase);
-                archive.directory(targetPath, path.join(zipBase, folderName));
-            } else {
-                const targetPath = path.join(sessionFolder, cleanBase);
-                archive.directory(targetPath, zipBase);
-            }
-
-            await archive.finalize();
-            await new Promise(resolve => output.on("close", resolve));
-
-            await fs.promises.rm(sessionFolder, { recursive: true, force: true });
-
-            const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
-
-            sendToDevice(deviceId, {
-                type: "upload_files",
-                deviceId,
-                sessionId,
-                downloadUrl,
-                remotePath: cleanBase
-            });
-
-            return res.json({ message: "Upload complete. Android notified.", downloadUrl });
-
-        } catch (err) {
-            console.error("Upload error:", err);
-            return res.status(500).json({ error: "Internal server error." });
-        }
-    });*/
+    /* app.post("/api/upload", upload.array("files[]"), async (req, res) => {
+         try {
+             const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
+             const files = req.files;
+ 
+             if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
+                 return res.status(400).json({ error: "Missing required fields." });
+             }
+ 
+             const cleanBase = basePath.replace(/^\/+/g, "");
+             const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+             const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+             await fs.promises.mkdir(sessionFolder, { recursive: true });
+ 
+             for (const f of files) {
+                 const relativePath = f.originalname;
+                 const dest = path.join(sessionFolder, cleanBase, relativePath);
+                 await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+                 await fs.promises.rename(f.path, dest);
+             }
+ 
+             const timestamp = Date.now();
+             const zipBase = `upload-${deviceId}-${timestamp}`;
+             const zipName = `${zipBase}.zip`;
+             const zipPath = path.join(UPLOAD_DIR, zipName);
+ 
+             const output = fs.createWriteStream(zipPath);
+             const archive = archiver("zip", { zlib: { level: 9 } });
+ 
+             archive.on("error", err => { throw err });
+             archive.pipe(output);
+ 
+             if (uploadType === "folder" && folderName) {
+                 const targetPath = path.join(sessionFolder, cleanBase);
+                 archive.directory(targetPath, path.join(zipBase, folderName));
+             } else {
+                 const targetPath = path.join(sessionFolder, cleanBase);
+                 archive.directory(targetPath, zipBase);
+             }
+ 
+             await archive.finalize();
+             await new Promise(resolve => output.on("close", resolve));
+ 
+             await fs.promises.rm(sessionFolder, { recursive: true, force: true });
+ 
+             const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+ 
+             sendToDevice(deviceId, {
+                 type: "upload_files",
+                 deviceId,
+                 sessionId,
+                 downloadUrl,
+                 remotePath: cleanBase
+             });
+ 
+             return res.json({ message: "Upload complete. Android notified.", downloadUrl });
+ 
+         } catch (err) {
+             console.error("Upload error:", err);
+             return res.status(500).json({ error: "Internal server error." });
+         }
+     });*/
 
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         try {
@@ -1244,15 +1247,15 @@ async function startServer() {
 
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
     app.use(
-  "/uploads",
-  express.static(UPLOAD_DIR, {
-    setHeaders: (res, filePath) => {
-      // Izvuci ime fajla i dodaj Content-Disposition: attachment
-      const fileName = path.basename(filePath);
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    }
-  })
-);
+        "/uploads",
+        express.static(UPLOAD_DIR, {
+            setHeaders: (res, filePath) => {
+                // Izvuci ime fajla i dodaj Content-Disposition: attachment
+                const fileName = path.basename(filePath);
+                res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+            }
+        })
+    );
 
     // Ispade da nam ne treba uopste ovaj endpoint jer web inicira download kroz download_request websocket poruku,
     // a android moze uploadati fajl na nas server koristenjem api/upload koja nam treba
@@ -1261,40 +1264,40 @@ async function startServer() {
 
     // Multer za jedan fajl
 
-app.post("/api/download", upload.single("file"), async (req, res) => {
-    try {
-        const { deviceId, sessionId } = req.body;
-        const file = req.file;           
+    app.post("/api/download", upload.single("file"), async (req, res) => {
+        try {
+            const { deviceId, sessionId } = req.body;
+            const file = req.file;
 
-        if (!deviceId || !sessionId || !file) {
-            return res.status(400).json({ error: "Missing required fields." });
+            if (!deviceId || !sessionId || !file) {
+                return res.status(400).json({ error: "Missing required fields." });
+            }
+
+            const timestamp = Date.now();
+            const safeName = path.basename(file.originalname);
+            const finalName = `download-${deviceId}-${timestamp}-${safeName}`;
+            const finalPath = path.join(UPLOAD_DIR, finalName);
+
+            await fs.promises.rename(file.path, finalPath);
+
+            const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${finalName}`;
+
+            if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                webAdminWs.send(JSON.stringify({
+                    type: "download_response",
+                    deviceId,
+                    sessionId,
+                    downloadUrl
+                }));
+            }
+
+            return res.json({ message: "File stored, Web notified.", downloadUrl });
+
+        } catch (err) {
+            console.error("Download upload error:", err);
+            return res.status(500).json({ error: "Internal server error." });
         }
-
-        const timestamp  = Date.now();
-        const safeName   = path.basename(file.originalname); 
-        const finalName  = `download-${deviceId}-${timestamp}-${safeName}`;
-        const finalPath  = path.join(UPLOAD_DIR, finalName);
-
-        await fs.promises.rename(file.path, finalPath);
-
-        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${finalName}`;
-
-        if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
-            webAdminWs.send(JSON.stringify({
-                type:        "download_response",
-                deviceId,
-                sessionId,
-                downloadUrl
-            }));
-        }
-
-        return res.json({ message: "File stored, Web notified.", downloadUrl });
-
-    } catch (err) {
-        console.error("Download upload error:", err);
-        return res.status(500).json({ error: "Internal server error." });
-    }
-});
+    });
 
 
     app.get("/debug/uploads", (req, res) => {
