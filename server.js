@@ -372,15 +372,12 @@ async function connectToWebAdmin() {
                 case "download_request": {
                     console.log("COMM LAYER: Processing download_request from Backend.");
                     const { deviceId, sessionId, paths } = data;
-
+                    console.log("Download data recieved from web:", data);
                     sendToDevice(deviceId, {
                         type: "download_request",
                         deviceId,
                         sessionId,
-                        paths: paths.map(path => ({
-                            name: path.name,
-                            type: path.type
-                        }))
+                        paths: paths
                     });
                     console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
 
