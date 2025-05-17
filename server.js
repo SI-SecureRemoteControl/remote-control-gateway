@@ -1277,7 +1277,7 @@ app.post("/api/download", upload.single("file"), async (req, res) => {
 
         await fs.promises.rename(file.path, finalPath);
 
-        downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${finalName}`;
+        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${finalName}`;
 
         if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
             webAdminWs.send(JSON.stringify({
