@@ -1249,75 +1249,43 @@ async function startServer() {
     // Moramo eventualno dodati jos neke web socket poruke sa obje strane kako bi i android mogao vrsiti upload koristenjem api/upload
     // Moramo nakon uspjesnog uploada (ukoliko ga radi android) obavijestiti i web admina o tome, isto kao sto radimo u suprotnom smjeru
 
-    app.get("/api/download", async (req, res) => {
-        try {
-            const { deviceId, sessionId } = req.query;
-            let paths = req.query.paths;
+    // Multer za jedan fajl
 
-            // Podrži i paths kao JSON niz i kao string
-            if (typeof paths === "string") {
-                try {
-                    paths = JSON.parse(paths);
-                } catch {
-                    paths = [paths];
-                }
-            }
+app.post("/api/download", upload.single("file"), async (req, res) => {
+    try {
+        const { deviceId, sessionId } = req.body;
+        const file = req.file;           
 
-            if (!deviceId || !sessionId || !paths || !Array.isArray(paths) || paths.length === 0) {
-                return res.status(400).json({ error: "Missing or invalid parameters: deviceId, sessionId, paths[]" });
-            }
+        if (!deviceId || !sessionId || !file) {
+            return res.status(400).json({ error: "Missing required fields." });
+        }
 
-            // Provjeri da li je uređaj povezan
-            const ws = clients.get(deviceId);
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                return res.status(404).json({ error: "Device not connected." });
-            }
+        const timestamp  = Date.now();
+        const safeName   = path.basename(file.originalname); 
+        const finalName  = `download-${deviceId}-${timestamp}-${safeName}`;
+        const finalPath  = path.join(UPLOAD_DIR, finalName);
 
-            // Generiši unique requestId za ovaj download
-            const requestId = `${deviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        await fs.promises.rename(file.path, finalPath);
 
-            // Pripremi promise koji će čekati odgovor od Androida
-            let timeout;
-            const downloadPromise = new Promise((resolve, reject) => {
-                function handleMessage(message) {
-                    try {
-                        const data = JSON.parse(message);
-                        if (
-                            data.type === "download_response" &&
-                            data.deviceId === deviceId &&
-                            data.sessionId === sessionId
-                        ) {
-                            ws.off("message", handleMessage);
-                            clearTimeout(timeout);
-                            resolve(data);
-                        }
-                    } catch { }
-                }
-                ws.on("message", handleMessage);
-            });
+        downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${finalName}`;
 
-            // Pošalji download_request Android uređaju
-            ws.send(JSON.stringify({
-                type: "download_request",
+        if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+            webAdminWs.send(JSON.stringify({
+                type:        "download_response",
                 deviceId,
                 sessionId,
-                paths
+                downloadUrl
             }));
-
-            // Sačekaj odgovor
-            const response = await downloadPromise;
-
-            // Prosledi downloadUrl Web Adminu
-            return res.json({
-                message: "Download ready.",
-                downloadUrl: response.downloadUrl
-            });
-
-        } catch (err) {
-            console.error("Download error:", err);
-            return res.status(500).json({ error: "Internal server error." });
         }
-    });
+
+        return res.json({ message: "File stored, Web notified.", downloadUrl });
+
+    } catch (err) {
+        console.error("Download upload error:", err);
+        return res.status(500).json({ error: "Internal server error." });
+    }
+});
+
 
     app.get("/debug/uploads", (req, res) => {
         fs.readdir(UPLOAD_DIR, (err, files) => {
