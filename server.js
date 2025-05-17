@@ -1261,7 +1261,7 @@ async function startServer() {
 
     // Multer za jedan fajl
 
-app.post("/api/download", upload.single("file"), async (req, res) => {
+app.get("/api/download", upload.single("file"), async (req, res) => {
     try {
         const { deviceId, sessionId } = req.body;
         const file = req.file;           
