@@ -3,7 +3,7 @@ const readline = require('readline');
 
 let backendWs = null;
 
-const wss = new WebSocket.Server({ port: 8081, path: '/ws/control/comm' });
+const wss = new WebSocket.Server({ port: 8082, path: '/ws/control/comm' });
 
 wss.on('connection', ws => {
     console.log('Web Admin: Backend connected!');

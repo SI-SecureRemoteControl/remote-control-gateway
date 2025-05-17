@@ -35,7 +35,7 @@ fs.mkdirSync(TEMP_DIR, { recursive: true });
 const upload = multer({ dest: TEMP_DIR });
 
 // Za lokalno testiranje
-let webAdminWs = new WebSocket('ws://localhost:8081/ws/control/comm');
+let webAdminWs = new WebSocket('ws://localhost:8082/ws/control/comm');
 
 // Za produkciju
 // let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
@@ -61,7 +61,7 @@ async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
     // webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
-    webAdminWs = new WebSocket('ws://localhost:8081/ws/control/comm');
+    webAdminWs = new WebSocket('ws://localhost:8082/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
@@ -854,12 +854,26 @@ async function startServer() {
                             message: message
                         }));
 
+                        try {
+                            const files = await fs.promises.readdir(UPLOAD_DIR);
+                            for (const file of files) {
+                                const filePath = path.join(UPLOAD_DIR, file);
+                                await fs.promises.rm(filePath, { recursive: true, force: true });
+                            }
+                            console.log(`Svi fajlovi u ${UPLOAD_DIR} obrisani nakon upload_status.`);
+                        } catch (err) {
+                            console.error("Greška pri brisanju fajlova iz UPLOAD_DIR:", err);
+                        }
+                    
+
                         // Notify the device we forwarded the upload status
                         ws.send(JSON.stringify({ type: "info", message: "Upload_status forwarded to Web Admin.", sessionId: tokenn }));
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                         logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
                     }
+
+                    
 
                     break;
 
@@ -1090,7 +1104,7 @@ async function startServer() {
     //sprint 7
 
     // ─── POST /api/upload ───────────────────────────
-    app.post("/api/upload", upload.array("files[]"), async (req, res) => {
+   /* app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         try {
             const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
             const files = req.files;
@@ -1151,7 +1165,80 @@ async function startServer() {
             console.error("Upload error:", err);
             return res.status(500).json({ error: "Internal server error." });
         }
+    });*/
+
+    app.post("/api/upload", upload.array("files[]"), async (req, res) => {
+        try {
+            const { deviceId, sessionId, path: basePath, uploadType } = req.body;
+            const files = req.files;
+
+            if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
+                return res.status(400).json({ error: "Missing required fields." });
+            }
+
+            const cleanBase = basePath.replace(/^\/+/g, "");
+            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+            await fs.promises.mkdir(sessionFolder, { recursive: true });
+
+            let zipName, zipPath, downloadUrl;
+
+            if (uploadType === "folder") {
+                // Pretpostavljamo da je stigao već ZIP-ovan folder (jedan fajl)
+                const zipFile = files[0];
+                zipName = zipFile.originalname.endsWith('.zip') ? zipFile.originalname : `${zipFile.originalname}.zip`;
+                zipPath = path.join(UPLOAD_DIR, zipName);
+                await fs.promises.rename(zipFile.path, zipPath);
+                downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+            } else if (uploadType === "files") {
+                // Više fajlova, treba ih zipovati
+                for (const f of files) {
+                    const relativePath = f.originalname;
+                    const dest = path.join(sessionFolder, cleanBase, relativePath);
+                    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+                    await fs.promises.rename(f.path, dest);
+                }
+
+                const timestamp = Date.now();
+                const zipBase = `upload-${deviceId}-${timestamp}`;
+                zipName = `${zipBase}.zip`;
+                zipPath = path.join(UPLOAD_DIR, zipName);
+
+                const output = fs.createWriteStream(zipPath);
+                const archive = archiver("zip", { zlib: { level: 9 } });
+
+                archive.on("error", err => { throw err });
+                archive.pipe(output);
+
+                const targetPath = path.join(sessionFolder, cleanBase);
+                archive.directory(targetPath, zipBase);
+
+                await archive.finalize();
+                await new Promise(resolve => output.on("close", resolve));
+
+                await fs.promises.rm(sessionFolder, { recursive: true, force: true });
+
+                downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+            } else {
+                return res.status(400).json({ error: "Invalid uploadType. Must be 'folder' or 'files'." });
+            }
+
+            sendToDevice(deviceId, {
+                type: "upload_files",
+                deviceId,
+                sessionId,
+                downloadUrl,
+                remotePath: cleanBase
+            });
+
+            return res.json({ message: "Upload complete. Android notified.", downloadUrl });
+
+        } catch (err) {
+            console.error("Upload error:", err);
+            return res.status(500).json({ error: "Internal server error." });
+        }
     });
+
 
 
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
