@@ -25,7 +25,7 @@ app.use(express.json());
 
 //sprint 7
 const UPLOAD_DIR = "/tmp/uploads";
-const TEMP_DIR   = "/tmp/temp_uploads";
+const TEMP_DIR = "/tmp/temp_uploads";
 
 // 🛠️ Kreiraj direktorije ako ne postoje (kod će ih kreirati automatski pri startu)
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -196,7 +196,7 @@ async function connectToWebAdmin() {
                         logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
                         break;
                     }
-                    
+
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
@@ -220,7 +220,7 @@ async function connectToWebAdmin() {
                 case "keyboard": {
                     const { fromId, toId, sessionId, payload, type } = data;
 
-                   //const { sessionId, key, code, type } = data;
+                    //const { sessionId, key, code, type } = data;
 
                     if (!sessionId || !payload.key || !payload.code || !type) {
                         //ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
@@ -229,13 +229,13 @@ async function connectToWebAdmin() {
                         break;
                     }
 
-                   /* const allowedPeers = approvedSessions.get(sessionId);
-                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
-                        //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
-                        break;
-                    }
-*/
+                    /* const allowedPeers = approvedSessions.get(sessionId);
+                     if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                         //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                         logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
+                         break;
+                     }
+ */
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
@@ -257,15 +257,15 @@ async function connectToWebAdmin() {
 
                 case "swipe": {
                     const { fromId, toId, sessionId, payload, type } = data;
-                
+
                     if (!fromId || !toId || !payload) {
                         console.warn(`COMM LAYER: Received invalid swipe message (${type}). Missing fields. Data:`, data);
                         logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid swipe message received from backend.`);
                         break;
                     }
-                
+
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
-                
+
                     const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({
@@ -275,16 +275,16 @@ async function connectToWebAdmin() {
                             payload
                         }));
                         logSessionEvent(
-                            sessionId, 
-                            toId, 
-                            "swipe", 
+                            sessionId,
+                            toId,
+                            "swipe",
                             `Swipe from (${payload.startX}, ${payload.startY}) to (${payload.endX}, ${payload.endY}) with velocity ${payload.velocity} sent to device.`
                         );
                     } else {
                         //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
                         logSessionEvent(sessionId, toId, "swipe", "Failed to send swipe input: device not connected.");
                     }
-                
+
                     break;
                 }
 
@@ -293,11 +293,11 @@ async function connectToWebAdmin() {
 
 
                 //sprint 7
-                case "decision_fileshare":{
+                case "decision_fileshare": {
                     console.log("COMM LAYER: Processing decision_fileshare from Backend.");
                     const { sessionId: decisionSessionId, decision } = data;
                     const deviceId = activeSessions.get(decisionSessionId);
-                    
+
 
                     if (!deviceId) {
                         console.error(`COMM LAYER: Received control_decision for session ${decisionSessionId}, but couldn't find deviceId in activeSessions.`);
@@ -345,7 +345,7 @@ async function connectToWebAdmin() {
 
                 case "browse_request": {
                     console.log("COMM LAYER: Processing browse_request from Backend.");
-                    const {sessionId, path} = data
+                    const { sessionId, path } = data
                     const deviceId = activeSessions.get(sessionId);
 
                     sendToDevice(deviceId, {
@@ -359,7 +359,7 @@ async function connectToWebAdmin() {
                     if (!approvedSessions.has(deviceId)) {
                         approvedSessions.set(deviceId, new Set());
                     }
-                    approvedSessions.get(deviceId).add("web-admin"); 
+                    approvedSessions.get(deviceId).add("web-admin");
 
                     break;
                 }
@@ -367,7 +367,7 @@ async function connectToWebAdmin() {
 
 
 
-                
+
                 default:
                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
                     logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
@@ -614,7 +614,7 @@ async function startServer() {
                     break;
 
 
-                
+
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                 case "session_final_confirmation":
                     const { token: finalToken, from: finalFrom, decision } = data;
@@ -700,14 +700,14 @@ async function startServer() {
 
 
                 //sprint 7
-                case "request_session_fileshare":{
+                case "request_session_fileshare": {
                     const { deviceId: from1, sessionId: token1 } = data;
 
                     clients.set(from1, ws);
 
                     console.log(`Session request from device ${from1} with token ${token1}`);
 
-                    const reqDevice = await devicesCollection.findOne({ deviceId: from1});
+                    const reqDevice = await devicesCollection.findOne({ deviceId: from1 });
                     if (!reqDevice) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
                         return;
@@ -748,7 +748,7 @@ async function startServer() {
                 }
 
 
-                case "browse_response":{
+                case "browse_response": {
                     const { deviceId: from, sessionId: tokenn, path, entries } = data;
 
                     //clients.set(from, ws);
@@ -979,69 +979,78 @@ async function startServer() {
 
     // ─── POST /api/upload ───────────────────────────
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
-    try {
-        const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
-        const files = req.files;
+        try {
+            const { deviceId, sessionId, path: basePath, uploadType } = req.body;
+            const files = req.files;
 
-        if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
-            return res.status(400).json({ error: "Missing required fields." });
+            if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
+                return res.status(400).json({ error: "Missing required fields." });
+            }
+
+            const cleanBase = basePath.replace(/^\/+/g, "");
+            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+            await fs.promises.mkdir(sessionFolder, { recursive: true });
+
+            let zipName, zipPath, downloadUrl;
+
+            if (uploadType === "folder") {
+                // Pretpostavljamo da je stigao već ZIP-ovan folder (jedan fajl)
+                const zipFile = files[0];
+                zipName = zipFile.originalname.endsWith('.zip') ? zipFile.originalname : `${zipFile.originalname}.zip`;
+                zipPath = path.join(UPLOAD_DIR, zipName);
+                await fs.promises.rename(zipFile.path, zipPath);
+                downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+            } else if (uploadType === "files") {
+                // Više fajlova, treba ih zipovati
+                for (const f of files) {
+                    const relativePath = f.originalname;
+                    const dest = path.join(sessionFolder, cleanBase, relativePath);
+                    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+                    await fs.promises.rename(f.path, dest);
+                }
+
+                const timestamp = Date.now();
+                const zipBase = `upload-${deviceId}-${timestamp}`;
+                zipName = `${zipBase}.zip`;
+                zipPath = path.join(UPLOAD_DIR, zipName);
+
+                const output = fs.createWriteStream(zipPath);
+                const archive = archiver("zip", { zlib: { level: 9 } });
+
+                archive.on("error", err => { throw err });
+                archive.pipe(output);
+
+                const targetPath = path.join(sessionFolder, cleanBase);
+                archive.directory(targetPath, zipBase);
+
+                await archive.finalize();
+                await new Promise(resolve => output.on("close", resolve));
+
+                await fs.promises.rm(sessionFolder, { recursive: true, force: true });
+
+                downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+            } else {
+                return res.status(400).json({ error: "Invalid uploadType. Must be 'folder' or 'files'." });
+            }
+
+            sendToDevice(deviceId, {
+                type: "upload_files",
+                deviceId,
+                sessionId,
+                downloadUrl,
+                remotePath: cleanBase
+            });
+
+            return res.json({ message: "Upload complete. Android notified.", downloadUrl });
+
+        } catch (err) {
+            console.error("Upload error:", err);
+            return res.status(500).json({ error: "Internal server error." });
         }
+    });
 
-        const cleanBase = basePath.replace(/^\/+/g, "");
-        const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-        const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-        await fs.promises.mkdir(sessionFolder, { recursive: true });
 
-        for (const f of files) {
-            const relativePath = f.originalname;
-            const dest = path.join(sessionFolder, cleanBase, relativePath);
-            await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-            await fs.promises.rename(f.path, dest);
-        }
-
-        const timestamp = Date.now();
-        const zipBase = `upload-${deviceId}-${timestamp}`;
-        const zipName = `${zipBase}.zip`;
-        const zipPath = path.join(UPLOAD_DIR, zipName);
-
-        const output = fs.createWriteStream(zipPath);
-        const archive = archiver("zip", { zlib: { level: 9 } });
-
-        archive.on("error", err => { throw err });
-        archive.pipe(output);
-
-        if (uploadType === "folder" && folderName) {
-            const targetPath = path.join(sessionFolder, cleanBase);
-            archive.directory(targetPath, path.join(zipBase, folderName));
-        } else {
-            const targetPath = path.join(sessionFolder, cleanBase);
-            archive.directory(targetPath, zipBase);
-        }
-
-        await archive.finalize();
-        await new Promise(resolve => output.on("close", resolve));
-
-        await fs.promises.rm(sessionFolder, { recursive: true, force: true });
-
-        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
-
-        sendToDevice(deviceId, {
-            type:       "upload_files",
-            deviceId,
-            sessionId,
-            downloadUrl,
-            remotePath: cleanBase
-        });
-
-        return res.json({ message: "Upload complete. Android notified.", downloadUrl });
-
-    } catch (err) {
-        console.error("Upload error:", err);
-        return res.status(500).json({ error: "Internal server error." });
-    }
-});
-
-    
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
     app.use("/uploads", express.static(UPLOAD_DIR));
 
@@ -1054,11 +1063,11 @@ async function startServer() {
     });
 
     app.get("/debug/uploads", (req, res) => {
-  fs.readdir(UPLOAD_DIR, (err, files) => {
-    if (err) return res.status(500).json({ err: err.message });
-    res.json(files);
-  });
-});
+        fs.readdir(UPLOAD_DIR, (err, files) => {
+            if (err) return res.status(500).json({ err: err.message });
+            res.json(files);
+        });
+    });
 
 
 
