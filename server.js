@@ -1243,7 +1243,16 @@ async function startServer() {
 
 
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
-    app.use("/uploads", express.static(UPLOAD_DIR));
+    app.use(
+  "/uploads",
+  express.static(UPLOAD_DIR, {
+    setHeaders: (res, filePath) => {
+      // Izvuci ime fajla i dodaj Content-Disposition: attachment
+      const fileName = path.basename(filePath);
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    }
+  })
+);
 
     // Ispade da nam ne treba uopste ovaj endpoint jer web inicira download kroz download_request websocket poruku,
     // a android moze uploadati fajl na nas server koristenjem api/upload koja nam treba
