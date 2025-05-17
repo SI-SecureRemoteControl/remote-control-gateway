@@ -25,7 +25,7 @@ app.use(express.json());
 
 //sprint 7
 const UPLOAD_DIR = "/tmp/uploads";
-const TEMP_DIR   = "/tmp/temp_uploads";
+const TEMP_DIR = "/tmp/temp_uploads";
 
 // 🛠️ Kreiraj direktorije ako ne postoje (kod će ih kreirati automatski pri startu)
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -34,7 +34,11 @@ fs.mkdirSync(TEMP_DIR, { recursive: true });
 // 📥 Multer za obradu fajlova
 const upload = multer({ dest: TEMP_DIR });
 
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+// Za lokalno testiranje
+let webAdminWs = new WebSocket('ws://localhost:8081/ws/control/comm');
+
+// Za produkciju
+// let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -56,7 +60,8 @@ function sendToDevice(deviceId, payload) {
 async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
-    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+    // webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+    webAdminWs = new WebSocket('ws://localhost:8081/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
@@ -196,7 +201,7 @@ async function connectToWebAdmin() {
                         logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid signaling message received from backend.`);
                         break;
                     }
-                    
+
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
@@ -220,7 +225,7 @@ async function connectToWebAdmin() {
                 case "keyboard": {
                     const { fromId, toId, sessionId, payload, type } = data;
 
-                   //const { sessionId, key, code, type } = data;
+                    //const { sessionId, key, code, type } = data;
 
                     if (!sessionId || !payload.key || !payload.code || !type) {
                         //ws.send(JSON.stringify({ type: "error", message: "Missing required fields for keyboard input." }));
@@ -229,13 +234,13 @@ async function connectToWebAdmin() {
                         break;
                     }
 
-                   /* const allowedPeers = approvedSessions.get(sessionId);
-                    if (!allowedPeers || !allowedPeers.has(sessionId)) {
-                        //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
-                        break;
-                    }
-*/
+                    /* const allowedPeers = approvedSessions.get(sessionId);
+                     if (!allowedPeers || !allowedPeers.has(sessionId)) {
+                         //ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
+                         logSessionEvent(sessionId, toId, "keyboard", "Unauthorized attempt to send keyboard input.");
+                         break;
+                     }
+ */
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
 
                     const target = clients.get(toId);
@@ -257,15 +262,15 @@ async function connectToWebAdmin() {
 
                 case "swipe": {
                     const { fromId, toId, sessionId, payload, type } = data;
-                
+
                     if (!fromId || !toId || !payload) {
                         console.warn(`COMM LAYER: Received invalid swipe message (${type}). Missing fields. Data:`, data);
                         logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid swipe message received from backend.`);
                         break;
                     }
-                
+
                     console.log(`COMM LAYER: Relaying ${type} from backend peer (${fromId}) to device ${toId}`);
-                
+
                     const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({
@@ -275,16 +280,16 @@ async function connectToWebAdmin() {
                             payload
                         }));
                         logSessionEvent(
-                            sessionId, 
-                            toId, 
-                            "swipe", 
+                            sessionId,
+                            toId,
+                            "swipe",
                             `Swipe from (${payload.startX}, ${payload.startY}) to (${payload.endX}, ${payload.endY}) with velocity ${payload.velocity} sent to device.`
                         );
                     } else {
                         //ws.send(JSON.stringify({ type: "error", message: "Target device not connected." }));
                         logSessionEvent(sessionId, toId, "swipe", "Failed to send swipe input: device not connected.");
                     }
-                
+
                     break;
                 }
 
@@ -293,11 +298,11 @@ async function connectToWebAdmin() {
 
 
                 //sprint 7
-                case "decision_fileshare":{
+                case "decision_fileshare": {
                     console.log("COMM LAYER: Processing decision_fileshare from Backend.");
                     const { sessionId: decisionSessionId, decision } = data;
                     const deviceId = activeSessions.get(decisionSessionId);
-                    
+
 
                     if (!deviceId) {
                         console.error(`COMM LAYER: Received control_decision for session ${decisionSessionId}, but couldn't find deviceId in activeSessions.`);
@@ -345,7 +350,7 @@ async function connectToWebAdmin() {
 
                 case "browse_request": {
                     console.log("COMM LAYER: Processing browse_request from Backend.");
-                    const {sessionId, path} = data
+                    const { sessionId, path } = data
                     const deviceId = activeSessions.get(sessionId);
 
                     sendToDevice(deviceId, {
@@ -354,20 +359,38 @@ async function connectToWebAdmin() {
                         sessionId: sessionId,
                         path: path
                     });
-                    console.log(`COM_LAYER: browse_request to device ${deviceId}`);
+                    console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
 
                     if (!approvedSessions.has(deviceId)) {
                         approvedSessions.set(deviceId, new Set());
                     }
-                    approvedSessions.get(deviceId).add("web-admin"); 
+                    approvedSessions.get(deviceId).add("web-admin");
+
+                    break;
+                }
+
+                case "download_request": {
+                    console.log("COMM LAYER: Processing download_request from Backend.");
+                    const { deviceId, sessionId, paths } = data;
+
+                    sendToDevice(deviceId, {
+                        type: "download_request",
+                        deviceId,
+                        sessionId,
+                        paths
+                    });
+                    console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
+
+                    if (!approvedSessions.has(deviceId)) {
+                        approvedSessions.set(deviceId, new Set());
+                    }
+                    approvedSessions.get(deviceId).add("web-admin");
 
                     break;
                 }
 
 
 
-
-                
                 default:
                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
                     logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', data.type, "Unhandled message type from Web Admin WS.");
@@ -614,7 +637,7 @@ async function startServer() {
                     break;
 
 
-                
+
                 //Device finalno salje potvrdu da prihvata sesiju i comm layer opet obavjestava web i tad pocinje
                 case "session_final_confirmation":
                     const { token: finalToken, from: finalFrom, decision } = data;
@@ -700,14 +723,14 @@ async function startServer() {
 
 
                 //sprint 7
-                case "request_session_fileshare":{
+                case "request_session_fileshare": {
                     const { deviceId: from1, sessionId: token1 } = data;
 
                     clients.set(from1, ws);
 
                     console.log(`Session request from device ${from1} with token ${token1}`);
 
-                    const reqDevice = await devicesCollection.findOne({ deviceId: from1});
+                    const reqDevice = await devicesCollection.findOne({ deviceId: from1 });
                     if (!reqDevice) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
                         return;
@@ -748,7 +771,7 @@ async function startServer() {
                 }
 
 
-                case "browse_response":{
+                case "browse_response": {
                     const { deviceId: from, sessionId: tokenn, path, entries } = data;
 
                     //clients.set(from, ws);
@@ -784,7 +807,7 @@ async function startServer() {
                             entries: entries
                         }));
 
-                        // Notify the device we forwarded the request
+                        // Notify the device we forwarded the response
                         ws.send(JSON.stringify({ type: "info", message: "Browse_response forwarded to Web Admin.", sessionId: tokenn }));
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
@@ -795,8 +818,97 @@ async function startServer() {
                     console.log("ApprovedSessions: \n\n", approvedSessions);
 
                     break;
+                }
+
+                case "upload_status": {
+                    const { deviceId: from, sessionId: tokenn, status, message } = data;
+
+                    //clients.set(from, ws);
+
+                    console.log(`Upload_status from device ${from} with token ${tokenn}`);
+
+                    const reqDevice = await devicesCollection.findOne({ deviceId: from });
+                    if (!reqDevice) {
+                        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+                        return;
+                    }
+
+                    const sessionUser = verifySessionToken(tokenn);
+                    if (!sessionUser || sessionUser.deviceId !== from) {
+                        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+                        return;
+                    }
+
+                    //activeSessions.set(tokenn, from);
+
+                    logSessionEvent(tokenn, from, data.type, "Upload_status from android device.");
+
+                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        console.log("Ja posaljem webu upload_status od androida");
+
+                        webAdminWs.send(JSON.stringify({
+                            type: "upload_status",
+                            deviceId: from,
+                            sessionId: tokenn,
+                            status: status,
+                            message: message
+                        }));
+
+                        // Notify the device we forwarded the upload status
+                        ws.send(JSON.stringify({ type: "info", message: "Upload_status forwarded to Web Admin.", sessionId: tokenn }));
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
+                        logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
+                    }
+
+                    break;
 
                 }
+
+                case "download_response": {
+                    const { deviceId: from, sessionId: tokenn, downloadUrl } = data;
+
+                    //clients.set(from, ws);
+
+                    console.log(`Download_response from device ${from} with token ${tokenn}`);
+
+                    const reqDevice = await devicesCollection.findOne({ deviceId: from });
+                    if (!reqDevice) {
+                        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
+                        return;
+                    }
+
+                    const sessionUser = verifySessionToken(tokenn);
+                    if (!sessionUser || sessionUser.deviceId !== from) {
+                        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
+                        return;
+                    }
+
+                    //activeSessions.set(tokenn, from);
+
+                    logSessionEvent(tokenn, from, data.type, "Download_response from android device.");
+
+                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        console.log("Ja posaljem webu download_response od androida");
+
+                        webAdminWs.send(JSON.stringify({
+                            type: "download_response",
+                            deviceId: from,
+                            sessionId: tokenn,
+                            downloadUrl: downloadUrl,
+                        }));
+
+                        // Notify the device we forwarded the download response
+                        ws.send(JSON.stringify({ type: "info", message: "Download_response forwarded to Web Admin.", sessionId: tokenn }));
+                    } else {
+                        ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
+                        logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
+                    }
+
+                    break;
+
+                }
+
 
 
 
@@ -979,86 +1091,153 @@ async function startServer() {
 
     // ─── POST /api/upload ───────────────────────────
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
-    try {
-        const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
-        const files = req.files;
+        try {
+            const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
+            const files = req.files;
 
-        if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
-            return res.status(400).json({ error: "Missing required fields." });
+            if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
+                return res.status(400).json({ error: "Missing required fields." });
+            }
+
+            const cleanBase = basePath.replace(/^\/+/g, "");
+            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+            await fs.promises.mkdir(sessionFolder, { recursive: true });
+
+            for (const f of files) {
+                const relativePath = f.originalname;
+                const dest = path.join(sessionFolder, cleanBase, relativePath);
+                await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+                await fs.promises.rename(f.path, dest);
+            }
+
+            const timestamp = Date.now();
+            const zipBase = `upload-${deviceId}-${timestamp}`;
+            const zipName = `${zipBase}.zip`;
+            const zipPath = path.join(UPLOAD_DIR, zipName);
+
+            const output = fs.createWriteStream(zipPath);
+            const archive = archiver("zip", { zlib: { level: 9 } });
+
+            archive.on("error", err => { throw err });
+            archive.pipe(output);
+
+            if (uploadType === "folder" && folderName) {
+                const targetPath = path.join(sessionFolder, cleanBase);
+                archive.directory(targetPath, path.join(zipBase, folderName));
+            } else {
+                const targetPath = path.join(sessionFolder, cleanBase);
+                archive.directory(targetPath, zipBase);
+            }
+
+            await archive.finalize();
+            await new Promise(resolve => output.on("close", resolve));
+
+            await fs.promises.rm(sessionFolder, { recursive: true, force: true });
+
+            const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+
+            sendToDevice(deviceId, {
+                type: "upload_files",
+                deviceId,
+                sessionId,
+                downloadUrl,
+                remotePath: cleanBase
+            });
+
+            return res.json({ message: "Upload complete. Android notified.", downloadUrl });
+
+        } catch (err) {
+            console.error("Upload error:", err);
+            return res.status(500).json({ error: "Internal server error." });
         }
+    });
 
-        const cleanBase = basePath.replace(/^\/+/g, "");
-        const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-        const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-        await fs.promises.mkdir(sessionFolder, { recursive: true });
 
-        for (const f of files) {
-            const relativePath = f.originalname;
-            const dest = path.join(sessionFolder, cleanBase, relativePath);
-            await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-            await fs.promises.rename(f.path, dest);
-        }
-
-        const timestamp = Date.now();
-        const zipBase = `upload-${deviceId}-${timestamp}`;
-        const zipName = `${zipBase}.zip`;
-        const zipPath = path.join(UPLOAD_DIR, zipName);
-
-        const output = fs.createWriteStream(zipPath);
-        const archive = archiver("zip", { zlib: { level: 9 } });
-
-        archive.on("error", err => { throw err });
-        archive.pipe(output);
-
-        if (uploadType === "folder" && folderName) {
-            const targetPath = path.join(sessionFolder, cleanBase);
-            archive.directory(targetPath, path.join(zipBase, folderName));
-        } else {
-            const targetPath = path.join(sessionFolder, cleanBase);
-            archive.directory(targetPath, zipBase);
-        }
-
-        await archive.finalize();
-        await new Promise(resolve => output.on("close", resolve));
-
-        await fs.promises.rm(sessionFolder, { recursive: true, force: true });
-
-        const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
-
-        sendToDevice(deviceId, {
-            type:       "upload_files",
-            deviceId,
-            sessionId,
-            downloadUrl,
-            remotePath: cleanBase
-        });
-
-        return res.json({ message: "Upload complete. Android notified.", downloadUrl });
-
-    } catch (err) {
-        console.error("Upload error:", err);
-        return res.status(500).json({ error: "Internal server error." });
-    }
-});
-
-    
     // 📂 Omogući serviranje ZIP fajlova iz /uploads
     app.use("/uploads", express.static(UPLOAD_DIR));
 
-    app.get("/download", async (req, res) => {
+    // Ispade da nam ne treba uopste ovaj endpoint jer web inicira download kroz download_request websocket poruku,
+    // a android moze uploadati fajl na nas server koristenjem api/upload koja nam treba
+    // Moramo eventualno dodati jos neke web socket poruke sa obje strane kako bi i android mogao vrsiti upload koristenjem api/upload
+    // Moramo nakon uspjesnog uploada (ukoliko ga radi android) obavijestiti i web admina o tome, isto kao sto radimo u suprotnom smjeru
 
+    app.get("/api/download", async (req, res) => {
+        try {
+            const { deviceId, sessionId } = req.query;
+            let paths = req.query.paths;
 
+            // Podrži i paths kao JSON niz i kao string
+            if (typeof paths === "string") {
+                try {
+                    paths = JSON.parse(paths);
+                } catch {
+                    paths = [paths];
+                }
+            }
 
+            if (!deviceId || !sessionId || !paths || !Array.isArray(paths) || paths.length === 0) {
+                return res.status(400).json({ error: "Missing or invalid parameters: deviceId, sessionId, paths[]" });
+            }
 
+            // Provjeri da li je uređaj povezan
+            const ws = clients.get(deviceId);
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                return res.status(404).json({ error: "Device not connected." });
+            }
 
+            // Generiši unique requestId za ovaj download
+            const requestId = `${deviceId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+            // Pripremi promise koji će čekati odgovor od Androida
+            let timeout;
+            const downloadPromise = new Promise((resolve, reject) => {
+                function handleMessage(message) {
+                    try {
+                        const data = JSON.parse(message);
+                        if (
+                            data.type === "download_response" &&
+                            data.deviceId === deviceId &&
+                            data.sessionId === sessionId
+                        ) {
+                            ws.off("message", handleMessage);
+                            clearTimeout(timeout);
+                            resolve(data);
+                        }
+                    } catch { }
+                }
+                ws.on("message", handleMessage);
+            });
+
+            // Pošalji download_request Android uređaju
+            ws.send(JSON.stringify({
+                type: "download_request",
+                deviceId,
+                sessionId,
+                paths
+            }));
+
+            // Sačekaj odgovor
+            const response = await downloadPromise;
+
+            // Prosledi downloadUrl Web Adminu
+            return res.json({
+                message: "Download ready.",
+                downloadUrl: response.downloadUrl
+            });
+
+        } catch (err) {
+            console.error("Download error:", err);
+            return res.status(500).json({ error: "Internal server error." });
+        }
     });
 
     app.get("/debug/uploads", (req, res) => {
-  fs.readdir(UPLOAD_DIR, (err, files) => {
-    if (err) return res.status(500).json({ err: err.message });
-    res.json(files);
-  });
-});
+        fs.readdir(UPLOAD_DIR, (err, files) => {
+            if (err) return res.status(500).json({ err: err.message });
+            res.json(files);
+        });
+    });
 
 
 
