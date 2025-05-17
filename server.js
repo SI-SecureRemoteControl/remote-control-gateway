@@ -35,7 +35,7 @@ fs.mkdirSync(TEMP_DIR, { recursive: true });
 const upload = multer({ dest: TEMP_DIR });
 
 // Za lokalno testiranje
-let webAdminWs = new WebSocket('ws://localhost:8082/ws/control/comm');
+let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 // Za produkciju
 // let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
@@ -61,7 +61,7 @@ async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
     // webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
-    webAdminWs = new WebSocket('ws://localhost:8082/ws/control/comm');
+    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
