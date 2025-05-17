@@ -1270,21 +1270,13 @@ async function startServer() {
                 return res.status(400).json({ error: "Missing required fields." });
             }
 
-            const timestamp = Date.now();
-            const safeName = path.basename(file.originalname);
-            const finalName = `download-${deviceId}-${timestamp}-${safeName}`;
-            const finalPath = path.join(UPLOAD_DIR, finalName);
-
-            await fs.promises.rename(file.path, finalPath);
-
-            const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${finalName}`;
-
+            const downloadUrl = `/uploads/${file.originalname}`;
             if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                 webAdminWs.send(JSON.stringify({
                     type: "download_response",
                     deviceId,
                     sessionId,
-                    downloadUrl
+                    downloadUrl: `https://remote-control-gateway-production.up.railway.app${downloadUrl}`
                 }));
             }
 
