@@ -377,7 +377,7 @@ async function connectToWebAdmin() {
                         type: "download_request",
                         deviceId,
                         sessionId,
-                        paths
+                        [paths]
                     });
                     console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
 
