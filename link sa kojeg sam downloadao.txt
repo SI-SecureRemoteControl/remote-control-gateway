@@ -1,0 +1,3 @@
+Prvo morate uploadati lokalno (trenutno je to moguce kao web admin tako sto cete prvo uraditi proceduru za upload pa tek onda preci na download) i naravno link ce se malo razlikovati jer se fajl nece bas zvati
+"upload-c7d865a558032f35-1747444009912.zip", ali bit ce dovoljno slicno
+http://localhost:8080/uploads/upload-c7d865a558032f35-1747444009912.zip
