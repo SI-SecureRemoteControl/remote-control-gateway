@@ -34,11 +34,8 @@ fs.mkdirSync(TEMP_DIR, { recursive: true });
 // 📥 Multer za obradu fajlova
 const upload = multer({ dest: TEMP_DIR });
 
-// Za lokalno testiranje
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
-
 // Za produkciju
-// let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -451,15 +448,6 @@ async function startServer() {
     const devicesCollection = db.collection('devices');
 
     const server = http.createServer(app);
-
-    //const server = https.createServer(app);
-
-    /*const server = https.createServer({
-        key: fs.readFileSync("./certs/private.key"),
-        cert: fs.readFileSync("./certs/certificate.crt")
-    }, app);*/
-
-
 
     const wss = new WebSocket.Server({ server });
 
