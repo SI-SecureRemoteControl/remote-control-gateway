@@ -880,7 +880,7 @@ async function startServer() {
 
                 }
 
-                case "download_response": {
+               /* case "download_response": {
                     const { deviceId: from, sessionId: tokenn, downloadUrl } = data;
 
                     //clients.set(from, ws);
@@ -922,7 +922,7 @@ async function startServer() {
 
                     break;
 
-                }
+                }*/
 
 
 
