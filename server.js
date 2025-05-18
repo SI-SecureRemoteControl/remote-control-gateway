@@ -377,7 +377,7 @@ async function connectToWebAdmin() {
                         type: "download_request",
                         deviceId,
                         sessionId,
-                        [paths]
+                        paths
                     });
                     console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
 
@@ -821,7 +821,7 @@ async function startServer() {
                 }
 
                 case "upload_status": {
-                    const { deviceId: from, sessionId: tokenn, status, path, message } = data;
+                    const { deviceId: from, sessionId: tokenn, status, path, fileName, message } = data;
 
                     //clients.set(from, ws);
 
@@ -855,16 +855,15 @@ async function startServer() {
                             path: path
                         }));
 
-                        try {
-                            const files = await fs.promises.readdir(UPLOAD_DIR);
-                            for (const file of files) {
-                                const filePath = path.join(UPLOAD_DIR, file);
-                                await fs.promises.rm(filePath, { recursive: true, force: true });
-                            }
-                            console.log(`Svi fajlovi u ${UPLOAD_DIR} obrisani nakon upload_status.`);
-                        } catch (err) {
-                            console.error("Greška pri brisanju fajlova iz UPLOAD_DIR:", err);
-                        }
+                        if (fileName) {
+                          const target = path.join(UPLOAD_DIR, fileName);
+                           try {
+                             await fs.promises.rm(target, { recursive: true, force: true });
+                             console.log(`Obrisan fajl ${fileName} iz ${UPLOAD_DIR} nakon upload_status.`);
+                          } catch (e) {
+                             console.error(`Greška pri brisanju ${target}:`, e.message);
+                          }
+                         }
                     
 
                         // Notify the device we forwarded the upload status
