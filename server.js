@@ -377,11 +377,7 @@ async function connectToWebAdmin() {
                         type: "download_request",
                         deviceId,
                         sessionId,
-<<<<<<< HEAD
-                        paths
-=======
                         paths: paths
->>>>>>> 0495ebfd5ca836c064e027ea10b7854a62005187
                     });
                     console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
 
