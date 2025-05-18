@@ -1270,7 +1270,21 @@ async function startServer() {
                 return res.status(400).json({ error: "Missing required fields." });
             }
 
+           // const timestamp = Date.now();
+            //const safeName = path.basename(file.originalname);
+            //const finalName = `download-${deviceId}-${timestamp}-${safeName}`;
+            const finalPath = path.join(UPLOAD_DIR, file.originalname);
+
+            await fs.promises.rename(file.path, finalPath);
             const downloadUrl = `/uploads/${file.originalname}`;
+
+            console.log("Preparing to send download_response to Web Admin:", {
+                type: "download_response",
+                deviceId,
+                sessionId,
+                downloadUrl: `https://remote-control-gateway-production.up.railway.app${downloadUrl}`
+            });
+
             if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                 webAdminWs.send(JSON.stringify({
                     type: "download_response",
@@ -1278,6 +1292,9 @@ async function startServer() {
                     sessionId,
                     downloadUrl: `https://remote-control-gateway-production.up.railway.app${downloadUrl}`
                 }));
+                console.log("Message sent to Web Admin successfully.");
+            } else {
+                console.warn("Web Admin WebSocket is not open. Message not sent.");
             }
 
             return res.json({ message: "File stored, Web notified.", downloadUrl });
