@@ -909,79 +909,6 @@ async function startServer() {
 
                 }
 
-               /* case "download_response": {
-                    const { deviceId: from, sessionId: tokenn, downloadUrl } = data;
-
-                    //clients.set(from, ws);
-
-                    console.log(`Download_response from device ${from} with token ${tokenn}`);
-
-                    const reqDevice = await devicesCollection.findOne({ deviceId: from });
-                    if (!reqDevice) {
-                        ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        return;
-                    }
-
-                    const sessionUser = verifySessionToken(tokenn);
-                    if (!sessionUser || sessionUser.deviceId !== from) {
-                        ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        return;
-                    }
-
-                    //activeSessions.set(tokenn, from);
-
-                    logSessionEvent(tokenn, from, data.type, "Download_response from android device.");
-
-                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
-                        console.log("Ja posaljem webu download_response od androida");
-
-                        webAdminWs.send(JSON.stringify({
-                            type: "download_response",
-                            deviceId: from,
-                            sessionId: tokenn,
-                            downloadUrl: downloadUrl,
-                        }));
-
-                        // Notify the device we forwarded the download response
-                        ws.send(JSON.stringify({ type: "info", message: "Download_response forwarded to Web Admin.", sessionId: tokenn }));
-                    } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
-                        logSessionEvent(tokenn, from, data.type, "Web Admin not connected.");
-                    }
-
-                    break;
-
-                }*/
-
-
-
-
-
-                /*case "remote_command": {
-                    const { fromId, toId, command } = data;
-
-                    const allowedPeers = approvedSessions.get(fromId);
-                    if (!allowedPeers || !allowedPeers.has(toId)) {
-                        ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent("unknown", fromId, "remote_command", "Unauthorized attempt to send remote command.");
-                        return;
-                    }
-
-                    const target = clients.get(toId);
-                    if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(JSON.stringify({
-                            type: "remote_command",
-                            fromId,
-                            command
-                        }));
-                        logSessionEvent("unknown", toId, "remote_command", `Remote command relayed from ${fromId}.`);
-                    } else {
-                        ws.send(JSON.stringify({ type: "error", message: "Target Android device not connected." }));
-                        logSessionEvent("unknown", toId, "remote_command", "Failed to send remote command: device not connected.");
-                    }
-
-                    break;
-                }*/
             }
 
         });
@@ -1131,72 +1058,6 @@ async function startServer() {
         }
     });
 
-    //sprint 7
-
-    // ─── POST /api/upload ───────────────────────────
-    /* app.post("/api/upload", upload.array("files[]"), async (req, res) => {
-         try {
-             const { deviceId, sessionId, path: basePath, uploadType, folderName } = req.body;
-             const files = req.files;
- 
-             if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
-                 return res.status(400).json({ error: "Missing required fields." });
-             }
- 
-             const cleanBase = basePath.replace(/^\/+/g, "");
-             const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-             const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-             await fs.promises.mkdir(sessionFolder, { recursive: true });
- 
-             for (const f of files) {
-                 const relativePath = f.originalname;
-                 const dest = path.join(sessionFolder, cleanBase, relativePath);
-                 await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-                 await fs.promises.rename(f.path, dest);
-             }
- 
-             const timestamp = Date.now();
-             const zipBase = `upload-${deviceId}-${timestamp}`;
-             const zipName = `${zipBase}.zip`;
-             const zipPath = path.join(UPLOAD_DIR, zipName);
- 
-             const output = fs.createWriteStream(zipPath);
-             const archive = archiver("zip", { zlib: { level: 9 } });
- 
-             archive.on("error", err => { throw err });
-             archive.pipe(output);
- 
-             if (uploadType === "folder" && folderName) {
-                 const targetPath = path.join(sessionFolder, cleanBase);
-                 archive.directory(targetPath, path.join(zipBase, folderName));
-             } else {
-                 const targetPath = path.join(sessionFolder, cleanBase);
-                 archive.directory(targetPath, zipBase);
-             }
- 
-             await archive.finalize();
-             await new Promise(resolve => output.on("close", resolve));
- 
-             await fs.promises.rm(sessionFolder, { recursive: true, force: true });
- 
-             const downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
- 
-             sendToDevice(deviceId, {
-                 type: "upload_files",
-                 deviceId,
-                 sessionId,
-                 downloadUrl,
-                 remotePath: cleanBase
-             });
- 
-             return res.json({ message: "Upload complete. Android notified.", downloadUrl });
- 
-         } catch (err) {
-             console.error("Upload error:", err);
-             return res.status(500).json({ error: "Internal server error." });
-         }
-     });*/
-
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         try {
             const { deviceId, sessionId, path: basePath, uploadType } = req.body;
@@ -1271,7 +1132,6 @@ async function startServer() {
 
 
 
-    // 📂 Omogući serviranje ZIP fajlova iz /uploads
     app.use(
         "/uploads",
         express.static(UPLOAD_DIR, {
@@ -1283,13 +1143,6 @@ async function startServer() {
         })
     );
 
-    // Ispade da nam ne treba uopste ovaj endpoint jer web inicira download kroz download_request websocket poruku,
-    // a android moze uploadati fajl na nas server koristenjem api/upload koja nam treba
-    // Moramo eventualno dodati jos neke web socket poruke sa obje strane kako bi i android mogao vrsiti upload koristenjem api/upload
-    // Moramo nakon uspjesnog uploada (ukoliko ga radi android) obavijestiti i web admina o tome, isto kao sto radimo u suprotnom smjeru
-
-    // Multer za jedan fajl
-
     app.post("/api/download", upload.single("file"), async (req, res) => {
         try {
             const { deviceId, sessionId } = req.body;
@@ -1299,9 +1152,6 @@ async function startServer() {
                 return res.status(400).json({ error: "Missing required fields." });
             }
 
-           // const timestamp = Date.now();
-            //const safeName = path.basename(file.originalname);
-            //const finalName = `download-${deviceId}-${timestamp}-${safeName}`;
             const finalPath = path.join(UPLOAD_DIR, file.originalname);
 
             await fs.promises.rename(file.path, finalPath);
@@ -1332,14 +1182,6 @@ async function startServer() {
             console.error("Download upload error:", err);
             return res.status(500).json({ error: "Internal server error." });
         }
-    });
-
-
-    app.get("/debug/uploads", (req, res) => {
-        fs.readdir(UPLOAD_DIR, (err, files) => {
-            if (err) return res.status(500).json({ err: err.message });
-            res.json(files);
-        });
     });
 
 
