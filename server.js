@@ -960,7 +960,7 @@ async function startServer() {
         // Prethodni kod nije radio jer se koristio deviceId koji nije definisan u ovom scope-u
         ws.on("close", () => {
             console.log("Client disconnected");
-            console.log("Klijenti: ", clients);
+            //console.log("Klijenti: ", clients);
         });
 
         /*server.listen(443, () => {
