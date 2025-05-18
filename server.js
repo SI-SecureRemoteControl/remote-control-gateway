@@ -1178,6 +1178,7 @@ async function startServer() {
             }
 
             let zipName, zipPath, downloadUrl;
+            const cleanBase = basePath.replace(/^\/+/g, "");
 
             if (uploadType === "folder") {
                 // Pretpostavljamo da je stigao već ZIP-ovan folder (jedan fajl)
@@ -1187,7 +1188,7 @@ async function startServer() {
                 await fs.promises.rename(zipFile.path, zipPath);
                 downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
             } else if (uploadType === "files") {
-            const cleanBase = basePath.replace(/^\/+/g, "");
+            
             const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
             const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
             await fs.promises.mkdir(sessionFolder, { recursive: true });
