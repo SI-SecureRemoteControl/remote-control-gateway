@@ -1177,11 +1177,6 @@ async function startServer() {
                 return res.status(400).json({ error: "Missing required fields." });
             }
 
-            const cleanBase = basePath.replace(/^\/+/g, "");
-            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-            await fs.promises.mkdir(sessionFolder, { recursive: true });
-
             let zipName, zipPath, downloadUrl;
 
             if (uploadType === "folder") {
@@ -1192,6 +1187,10 @@ async function startServer() {
                 await fs.promises.rename(zipFile.path, zipPath);
                 downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
             } else if (uploadType === "files") {
+            const cleanBase = basePath.replace(/^\/+/g, "");
+            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+            await fs.promises.mkdir(sessionFolder, { recursive: true });
                 // Više fajlova, treba ih zipovati
                 for (const f of files) {
                     const relativePath = f.originalname;
