@@ -821,7 +821,7 @@ async function startServer() {
                 }
 
                 case "upload_status": {
-                    const { deviceId: from, sessionId: tokenn, status, path, fileName, message } = data;
+                    const { deviceId: from, sessionId: tokenn, status, path:paths, fileName, message } = data;
 
                     //clients.set(from, ws);
 
@@ -852,7 +852,7 @@ async function startServer() {
                             sessionId: tokenn,
                             status: status,
                             message: message,
-                            path: path
+                            path: paths
                         }));
 
                         if (fileName) {
