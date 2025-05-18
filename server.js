@@ -67,7 +67,7 @@ async function connectToWebAdmin() {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
     });
 
-    webAdminWs.on('message', (message) => {
+    webAdminWs.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
             console.log('\nCOMM LAYER: Received message from Web Admin WS:', data);
@@ -388,6 +388,35 @@ async function connectToWebAdmin() {
 
                     break;
                 }
+
+                // unutar switch-a koji obrađuje poruke iz Web-admin WS-a (connectToWebAdmin on 'message')
+                case "download_status": {
+                    const { deviceId, sessionId, status, message, fileName } = data;
+
+                    console.log(
+                    `COMM LAYER: download_status  device=${deviceId}  session=${sessionId}  status=${status}  file=${fileName}`
+                    );
+
+                    // evidencija u Mongo / fajl-loggeru
+                    logSessionEvent(sessionId, deviceId, "download_status", message || status);
+
+                    // obriši ZIP ili pojedinačni fajl koji je Web upravo povukao
+                    if (fileName) {
+                        const target = path.join(UPLOAD_DIR, fileName);
+                        try {
+                            await fs.promises.rm(target, { recursive: true, force: true });
+                            console.log(`Deleted ${fileName} from ${UPLOAD_DIR} after download_status.`);
+                        } catch (e) {
+                            console.error(`Error deleting ${target}:`, e.message);
+                        }
+                    } else {
+                        console.warn("download_status arrived without fileName – nothing to delete.");
+                    }
+
+                    // nema dalje slanja Androidu
+                    break;
+                }
+
 
 
 
