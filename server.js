@@ -648,49 +648,59 @@ async function startServer() {
                     break;
 
                 case "session_request":
-                    const { from, token: tokenn } = data;
+                    const { from, token: existingToken } = data;
 
                     clients.set(from, ws);
 
-                    console.log(`Session request from device ${from} with token ${tokenn}`);
+                    console.log(`Session request from device ${from} with token ${existingToken}`);
 
                     const reqDevice = await devicesCollection.findOne({ deviceId: from });
                     if (!reqDevice) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        logSessionEvent(tokenn, from, 'session_request_error', 'Session request failed - device not registered'); //sprint 8
+                        logSessionEvent(existingToken, from, 'session_request_error', 'Session request failed - device not registered');
                         return;
                     }
 
-                    const sessionUser = verifySessionToken(tokenn);
+                    // Verifikacija postojećeg tokena (registracijskog)
+                    const sessionUser = verifySessionToken(existingToken);
                     if (!sessionUser || sessionUser.deviceId !== from) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        logSessionEvent(tokenn, from, 'session_request_error', 'Session request failed - invalid session token'); //sprint 8
+                        logSessionEvent(existingToken, from, 'session_request_error', 'Session request failed - invalid session token');
                         return;
                     }
 
-                    //sprint 8
-                    activeSessions.set(tokenn, from);
-                    updateSessionActivity(tokenn);
+                    // Generirajte NOVI token za ovu sesiju
+                    const sessionToken = jwt.sign({
+                        deviceId: from,
+                        sessionType: "screen_share",
+                        createdAt: new Date()
+                    }, process.env.JWT_SECRET, { expiresIn: '1d' }); // Token ističe za 1 dan
 
-                    console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
+                    activeSessions.set(sessionToken, from);
+                    updateSessionActivity(sessionToken);
 
-                    logSessionEvent(tokenn, from, data.type, "Session request initiated by device");
+                    console.log(`\n\nSession request from device ${from} with new session token ${sessionToken}'\n\n`);
+
+                    logSessionEvent(sessionToken, from, data.type, "Session request initiated by device");
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
-                        console.log("Ja posaljem webu request od androida");
+                        console.log("Sending session request to web admin");
 
                         webAdminWs.send(JSON.stringify({
                             type: "request_control",
-                            sessionId: tokenn,
+                            sessionId: sessionToken, // Koristite novi token kao sessionId
                             deviceId: from,
-                            ovosesalje: "glupost"
                         }));
 
-                        ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
-                        logSessionEvent(tokenn, from, 'session_request_forwarded', 'Session request forwarded to web admin successfully'); //sprint 8
+                        ws.send(JSON.stringify({
+                            type: "info",
+                            message: "Session request forwarded to Web Admin.",
+                            sessionId: sessionToken // Vratite novi token uređaju
+                        }));
+                        logSessionEvent(sessionToken, from, 'session_request_forwarded', 'Session request forwarded to web admin successfully');
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
-                        logSessionEvent(tokenn, from, 'session_request_error', "Session request failed - Web Admin not connected"); //sprint 8
+                        logSessionEvent(sessionToken, from, 'session_request_error', "Session request failed - Web Admin not connected");
                     }
 
                     console.log("ActiveSessions: \n\n", activeSessions);
