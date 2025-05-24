@@ -71,7 +71,7 @@ async function connectToWebAdmin() {
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
-        logSessionEvent('system', 'comm_layer', 'websocket_connection', 'Successfully connected to Web Admin WS Backend');
+        //logSessionEvent('system', 'comm_layer', 'websocket_connection', 'Successfully connected to Web Admin WS Backend');
     });
 
     webAdminWs.on('message', async (message) => {
@@ -146,14 +146,14 @@ async function connectToWebAdmin() {
 
                     if (!deviceIdForTermination) {
                         console.warn(`COMM LAYER: Received termination for session ${terminatedSessionId}, but couldn't map it back to a deviceId in activeSessions.`);
-                        logSessionEvent(terminatedSessionId, 'unknown', data.type, `Session termination received but device mapping lost. Reason: ${reason || 'No reason provided'}`);
+                        logSessionEvent(terminatedSessionId, 'unknown', "session_end", `Session termination received but device mapping lost. Reason: ${reason || 'No reason provided'}`);
                         activeSessions.delete(terminatedSessionId);
                         sessionActivity.delete(terminatedSessionId); //sprint 8
                         return;
                     }
 
                     console.log(`COMM LAYER: Found deviceId ${deviceIdForTermination} for terminated session ${terminatedSessionId}. Reason: ${reason}`);
-                    logSessionEvent(terminatedSessionId, deviceIdForTermination, data.type, `Session terminated by web admin. Reason: ${reason || 'No reason provided'}`);
+                    logSessionEvent(terminatedSessionId, deviceIdForTermination, "session_end", `Session terminated by web admin. Reason: ${reason || 'No reason provided'}`);
 
                     // Cleanup Logic
                     activeSessions.delete(terminatedSessionId);
@@ -197,7 +197,7 @@ async function connectToWebAdmin() {
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
                         //sprint 8
-                        logSessionEvent(data.sessionId || 'unknown', toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
+                        logSessionEvent(data.sessionId || 'ice_candidate', toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
                         updateSessionActivity(data.sessionId);
                     } else {
                         console.warn(`COMM LAYER: Target device ${toId} for ${type} not found or not connected.`);
@@ -462,27 +462,27 @@ async function connectToWebAdmin() {
 
                 default:
                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
-                    logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', 'unhandled_message', `Unhandled message type from Web Admin: ${data.type}`);
+                    //logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', 'unhandled_message', `Unhandled message type from Web Admin: ${data.type}`);
                     break;
             }
 
         } catch (error) {
             console.error('COMM LAYER: Error parsing message from Web Admin WS:', error);
             console.error('COMM LAYER: Raw message was:', message.toString ? message.toString() : message);
-            logSessionEvent('unknown', 'comm_layer', 'parse_error', `Error parsing message from Web Admin WS: ${error.message}`); //sprint 8
+            //logSessionEvent('unknown', 'comm_layer', 'parse_error', `Error parsing message from Web Admin WS: ${error.message}`); //sprint 8
         }
 
     });
 
     webAdminWs.on('close', () => {
         console.log(`!!! COMM LAYER: Web Admin WS Disconnected. Retrying in 5s...`);
-        logSessionEvent('system', 'comm_layer', 'websocket_disconnect', 'Web Admin WebSocket connection closed - attempting reconnection'); //sprint 8
+        //logSessionEvent('system', 'comm_layer', 'websocket_disconnect', 'Web Admin WebSocket connection closed - attempting reconnection'); //sprint 8
         setTimeout(connectToWebAdmin, 5000);
     });
 
     webAdminWs.on('error', (err) => {
         console.error('Web Admin WS Error:', err.message);
-        logSessionEvent('system', 'comm_layer', 'websocket_error', `Web Admin WebSocket error: ${err.message}`); //sprint 8
+        //logSessionEvent('system', 'comm_layer', 'websocket_error', `Web Admin WebSocket error: ${err.message}`); //sprint 8
     });
 }
 
@@ -497,7 +497,7 @@ async function startServer() {
 
     wss.on("connection", (ws) => {
         console.log("New client connected");
-        logSessionEvent('system', 'comm_layer', 'client_connection', 'New client connected to WebSocket server'); //sprint 8
+        //logSessionEvent('system', 'comm_layer', 'client_connection', 'New client connected to WebSocket server'); //sprint 8
 
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
@@ -556,7 +556,7 @@ async function startServer() {
                     const token = jwt.sign({ deviceId }, process.env.JWT_SECRET);
 
                     console.log(`[REGISTRATION] Generated JWT for device ${deviceId}: ${token}`);
-                    logSessionEvent('system', deviceId, 'device_registration', `Device registered successfully - Model: ${data.model || 'N/A'}, OS: ${data.osVersion || 'N/A'}`); //sprint 8
+                    //logSessionEvent('system', deviceId, 'device_registration', `Device registered successfully - Model: ${data.model || 'N/A'}, OS: ${data.osVersion || 'N/A'}`); //sprint 8
 
                     console.log(`Device ${deviceId} registered.`);
                     ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.`, token }));
@@ -565,20 +565,20 @@ async function startServer() {
                 case "deregister":
                     if (!data.deviceId || !data.deregistrationKey) {
                         ws.send(JSON.stringify({ type: "error", message: "Missing required fields: deviceId, deregistrationKey" }));
-                        logSessionEvent('unknown', data.deviceId || 'unknown', 'deregistration_error', 'Device deregistration failed - missing required fields'); //sprint 8
+                        //logSessionEvent('unknown', data.deviceId || 'unknown', 'deregistration_error', 'Device deregistration failed - missing required fields'); //sprint 8
                         return;
                     }
 
                     const device = await devicesCollection.findOne({ deviceId: data.deviceId });
                     if (!device) {
                         ws.send(JSON.stringify({ type: "error", message: `Device not found.` }));
-                        logSessionEvent('unknown', data.deviceId, 'deregistration_error', 'Device deregistration failed - device not found'); //sprint 8
+                        //logSessionEvent('unknown', data.deviceId, 'deregistration_error', 'Device deregistration failed - device not found'); //sprint 8
                         return;
                     }
 
                     if (device.deregistrationKey !== data.deregistrationKey) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid deregistration key." }));
-                        logSessionEvent('unknown', data.deviceId, 'deregistration_error', 'Device deregistration failed - invalid deregistration key'); //sprint 8
+                        //logSessionEvent('unknown', data.deviceId, 'deregistration_error', 'Device deregistration failed - invalid deregistration key'); //sprint 8
                         return;
                     }
 
@@ -588,7 +588,7 @@ async function startServer() {
                     ws.close();
 
                     console.log(`Device ${data.deviceId} deregistered and removed from database.`);
-                    logSessionEvent('system', data.deviceId, 'device_deregistration', 'Device deregistered and removed from database successfully'); //sprint 8
+                    //logSessionEvent('system', data.deviceId, 'device_deregistration', 'Device deregistered and removed from database successfully'); //sprint 8
 
                     ws.send(JSON.stringify({ type: "success", message: `Device deregistered successfully and removed from database.` }));
                     break;
@@ -611,7 +611,7 @@ async function startServer() {
                         },
                         { returnDocument: 'after' }
                     );
-                    logSessionEvent('system', data.deviceId, 'device_status', `Device status updated to: ${data.status}`); //sprint 8
+                    //('system', data.deviceId, 'device_status', `Device status updated to: ${data.status}`); //sprint 8
                     break;
 
                 case "signal":
@@ -620,16 +620,16 @@ async function startServer() {
                     const allowedPeers = approvedSessions.get(senderId);
                     if (!allowedPeers || !allowedPeers.has(receiverId)) {
                         ws.send(JSON.stringify({ type: "error", message: "Session not approved between devices." }));
-                        logSessionEvent('unknown', senderId, 'signal_error', `Unauthorized signal attempt to ${receiverId} - session not approved`); //sprint 8
+                        //logSessionEvent('unknown', senderId, 'signal_error', `Unauthorized signal attempt to ${receiverId} - session not approved`); //sprint 8
                         return;
                     }
 
                     const target = clients.get(receiverId);
                     if (target) {
                         target.send(JSON.stringify({ type: "signal", from: senderId, payload }));
-                        logSessionEvent('unknown', senderId, 'signal_relay', `WebRTC signal relayed to ${receiverId} successfully`); //sprint 8
+                        //logSessionEvent('unknown', senderId, 'signal_relay', `WebRTC signal relayed to ${receiverId} successfully`); //sprint 8
                     } else {
-                        logSessionEvent('unknown', senderId, 'signal_error', `Failed to relay signal to ${receiverId} - target device not connected`); //sprint 8
+                        //logSessionEvent('unknown', senderId, 'signal_error', `Failed to relay signal to ${receiverId} - target device not connected`); //sprint 8
                     }
                     break;
 
@@ -676,7 +676,8 @@ async function startServer() {
 
                     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
 
-                    logSessionEvent(tokenn, from, data.type, "Session request initiated by device"); 
+                    logSessionEvent(tokenn, from, data.type, "Session request initiated by device");
+                    await new Promise(resolve => setTimeout(resolve, 10));
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         console.log("Ja posaljem webu request od androida");
@@ -917,7 +918,7 @@ async function startServer() {
                 //sprint 8
                 default:
                     console.log(`Received unhandled message type from device: ${data.type}`);
-                    logSessionEvent('unknown', data.deviceId || 'unknown', 'unhandled_message', `Unhandled message type from device: ${data.type}`);
+                    //logSessionEvent('unknown', data.deviceId || 'unknown', 'unhandled_message', `Unhandled message type from device: ${data.type}`);
                     break;
             }
 
@@ -925,7 +926,7 @@ async function startServer() {
 
         ws.on("close", () => {
             console.log("Client disconnected");
-            logSessionEvent('system', 'unknown', 'client_disconnect', 'Client disconnected from WebSocket server'); //sprint 8
+            //logSessionEvent('system', 'unknown', 'client_disconnect', 'Client disconnected from WebSocket server'); //sprint 8
         });
 
     });
@@ -1006,7 +1007,7 @@ async function startServer() {
                     );
 
                     lastHeartbeat.delete(deviceId);
-                    logSessionEvent('system', deviceId, 'device_timeout', 'Device marked as inactive due to missing heartbeat'); //sprint 8
+                    //logSessionEvent('system', deviceId, 'device_timeout', 'Device marked as inactive due to missing heartbeat'); //sprint 8
                     try {
                         ws.close();
                     } catch (err) {
@@ -1077,7 +1078,7 @@ async function startServer() {
             }
 
             console.log(`Device ${deviceId} deregistered and removed from database.`);
-            logSessionEvent('system', deviceId, 'device_deregistration_api', 'Device deregistered via API endpoint'); //sprint 8
+            //logSessionEvent('system', deviceId, 'device_deregistration_api', 'Device deregistered via API endpoint'); //sprint 8
             res.status(200).json({ message: `Device ${deviceId} deregistered successfully and removed from the database.` });
 
         } catch (error) {
@@ -1098,7 +1099,7 @@ async function startServer() {
         const removedFromActiveSessions = activeSessions.delete(token);
 
         if (removedFromSessions || removedFromActiveSessions) {
-            logSessionEvent(token, deviceId, 'session_removal', 'Session manually removed via API'); //sprint 8
+            logSessionEvent(token, deviceId, 'session_end', 'Session manually removed via API'); //sprint 8
             return res.status(200).json({ success: true, message: 'Session removed.' });
         } else {
             return res.status(404).json({ success: false, message: 'Session not found.' });
@@ -1111,7 +1112,7 @@ async function startServer() {
             const files = req.files;
 
             if (!deviceId || !sessionId || !basePath || !files?.length || !uploadType) {
-                logSessionEvent(sessionId, deviceId, 'upload_error', 'Upload failed - missing required fields'); //sprint 8
+                //logSessionEvent(sessionId, deviceId, 'upload_error', 'Upload failed - missing required fields'); //sprint 8
                 return res.status(400).json({ error: "Missing required fields." });
             }
 
@@ -1246,19 +1247,19 @@ async function startServer() {
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
         console.log("Server listening on port", PORT);
-        logSessionEvent('system', 'comm_layer', 'server_start', `Communication layer server started on port ${PORT}`); //sprint 8
+        //logSessionEvent('system', 'comm_layer', 'server_start', `Communication layer server started on port ${PORT}`); //sprint 8
     });
 }
 
 // Start the server with DB connection
 startServer().catch((err) => {
     console.error("Error starting server:", err);
-    logSessionEvent('system', 'comm_layer', 'server_error', `Failed to start server: ${err.message}`); //sprint 8
+    //logSessionEvent('system', 'comm_layer', 'server_error', `Failed to start server: ${err.message}`); //sprint 8
     process.exit(1);
 });
 
 connectToWebAdmin().catch((err) => {
     console.error("Error connecting to web admin:", err);
-    logSessionEvent('system', 'comm_layer', 'connection_error', `Failed to connect to web admin: ${err.message}`); //sprint 8
+    //logSessionEvent('system', 'comm_layer', 'connection_error', `Failed to connect to web admin: ${err.message}`); //sprint 8
     process.exit(1);
 });
