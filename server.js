@@ -686,6 +686,8 @@ async function startServer() {
                             ovosesalje: "glupost"
                         }));
 
+                        tokenn = jwt.sign({ deviceId: from, sessionId: tokenn }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
                         ws.send(JSON.stringify({ type: "info", message: "Session request forwarded to Web Admin.", sessionId: tokenn }));
                         logSessionEvent(tokenn, from, 'session_request_forwarded', 'Session request forwarded to web admin successfully'); //sprint 8
                     } else {
