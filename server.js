@@ -830,27 +830,35 @@ async function startServer() {
                 case "browse_response": {
                     const { deviceId: from, sessionId: tokenn, path, entries } = data;
 
-                    console.log(`Browse response from device ${from} with token ${tokenn}`);
+                    let sessionTokenn = null;
+                    for (const [token, deviceId] of activeSessions.entries()) {
+                        if (deviceId === from) {
+                            sessionTokenn = token;
+                            break;
+                        }
+                    }
+
+                    console.log(`Browse response from device ${from} with token ${sessionTokenn}`);
 
                     const reqDevice = await devicesCollection.findOne({ deviceId: from });
                     if (!reqDevice) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        logSessionEvent(tokenn, from, 'browse_response_error', 'Browse response failed - device not registered'); //sprint 8
+                        logSessionEvent(sessionTokenn, from, 'browse_response_error', 'Browse response failed - device not registered'); //sprint 8
                         return;
                     }
 
-                    const sessionUser = verifySessionToken(tokenn);
+                    const sessionUser = verifySessionToken(sessionTokenn);
                     if (!sessionUser || sessionUser.deviceId !== from) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        logSessionEvent(tokenn, from, 'browse_response_error', 'Browse response failed - invalid session token'); //sprint 8
+                        logSessionEvent(sessionTokenn, from, 'browse_response_error', 'Browse response failed - invalid session token'); //sprint 8
                         return;
                     }
 
-                    updateSessionActivity(tokenn); //sprint 8
+                    updateSessionActivity(sessionTokenn); //sprint 8
 
-                    console.log(`\n\nBrowse response from device ${from} with token ${tokenn}'\n\n`);
+                    console.log(`\n\nBrowse response from device ${from} with token ${sessionTokenn}'\n\n`);
 
-                    logSessionEvent(tokenn, from, data.type, `Browse response from device - Path: ${path}, Entries: ${entries ? entries.length : 0} items`);
+                    logSessionEvent(sessionTokenn, from, data.type, `Browse response from device - Path: ${path}, Entries: ${entries ? entries.length : 0} items`);
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         console.log("Sending browse response to web admin");
@@ -858,16 +866,16 @@ async function startServer() {
                         webAdminWs.send(JSON.stringify({
                             type: "browse_response",
                             deviceId: from,
-                            sessionId: tokenn,
+                            sessionId: sessionTokenn,
                             path: path,
                             entries: entries
                         }));
 
                         ws.send(JSON.stringify({ type: "info", message: "Browse response forwarded to Web Admin.", sessionId: tokenn }));
-                        logSessionEvent(tokenn, from, 'browse_response_forwarded', 'Browse response forwarded to web admin successfully'); //sprint 8
+                        logSessionEvent(sessionTokenn, from, 'browse_response_forwarded', 'Browse response forwarded to web admin successfully'); //sprint 8
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
-                        logSessionEvent(tokenn, from, 'browse_response_error', "Browse response failed - Web Admin not connected");
+                        logSessionEvent(sessionTokenn, from, 'browse_response_error', "Browse response failed - Web Admin not connected");
                     }
 
                     break;
