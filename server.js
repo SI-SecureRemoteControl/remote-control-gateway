@@ -712,39 +712,47 @@ async function startServer() {
                 case "session_final_confirmation":
                     const { token: finalToken, from: finalFrom, decision } = data;
 
-                    console.log(`Session final confirmation from device ${finalFrom} with token ${sessionToken} and decision ${decision}`);
+                    let sessionTokenn = null;
+                    for (const [token, deviceId] of activeSessions.entries()) {
+                        if (deviceId === finalFrom) {
+                            sessionTokenn = token;
+                            break;
+                        }
+                    }
+
+                    console.log(`Session final confirmation from device ${finalFrom} with token ${sessionTokenn} and decision ${decision}`);
 
                     const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
                     if (!reqDeviceFinal) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        logSessionEvent(sessionToken, finalFrom, 'session_confirmation_error', "Session confirmation failed - device not registered");
+                        logSessionEvent(sessionTokenn, finalFrom, 'session_confirmation_error', "Session confirmation failed - device not registered");
                         return;
                     }
 
-                    const sessionUserFinal = verifySessionToken(sessionToken);
+                    const sessionUserFinal = verifySessionToken(sessionTokenn);
                     if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        logSessionEvent(sessionToken, finalFrom, 'session_confirmation_error', "Session confirmation failed - invalid session token");
+                        logSessionEvent(sessionTokenn, finalFrom, 'session_confirmation_error', "Session confirmation failed - invalid session token");
                         return;
                     }
 
                     if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionToken, status: "connected" }));
-                        logSessionEvent(sessionToken, finalFrom, data.type, "Session accepted by device - control session established");
-                        updateSessionActivity(sessionToken); //sprint 8
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionTokenn, status: "connected" }));
+                        logSessionEvent(sessionTokenn, finalFrom, data.type, "Session accepted by device - control session established");
+                        updateSessionActivity(sessionTokenn); //sprint 8
                     }
                     else if (decision === "rejected") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionToken, status: "failed" }));
-                        logSessionEvent(sessionToken, finalFrom, data.type, "Session rejected by device - control session failed to establish");
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionTokenn, status: "failed" }));
+                        logSessionEvent(sessionTokenn, finalFrom, data.type, "Session rejected by device - control session failed to establish");
 
                         //sprint 8
-                        activeSessions.delete(sessionToken);
-                        sessionActivity.delete(sessionToken);
+                        activeSessions.delete(sessionTokenn);
+                        sessionActivity.delete(sessionTokenn);
                         break;
                     }
 
                     ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
-                    logSessionEvent(sessionToken, finalFrom, "session_start", "Control session successfully established between device and web admin");
+                    logSessionEvent(sessionTokenn, finalFrom, "session_start", "Control session successfully established between device and web admin");
 
                     break;
 
