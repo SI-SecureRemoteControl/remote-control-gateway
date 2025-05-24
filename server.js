@@ -710,55 +710,41 @@ async function startServer() {
                     break;
 
                 case "session_final_confirmation":
-                    const { token: finalToken, from: finalFrom, decision, sessionToken: newSessionToken } = data; // Dodajte sessionToken u poruku
+                    const { token: finalToken, from: finalFrom, decision } = data;
 
-                    console.log(`Session final confirmation from device ${finalFrom} with token ${finalToken} and decision ${decision}`);
+                    console.log(`Session final confirmation from device ${finalFrom} with token ${sessionToken} and decision ${decision}`);
 
                     const reqDeviceFinal = await devicesCollection.findOne({ deviceId: finalFrom });
                     if (!reqDeviceFinal) {
                         ws.send(JSON.stringify({ type: "error", message: "Device is not registered." }));
-                        logSessionEvent(newSessionToken || finalToken, finalFrom, 'session_confirmation_error', "Session confirmation failed - device not registered");
+                        logSessionEvent(sessionToken, finalFrom, 'session_confirmation_error', "Session confirmation failed - device not registered");
                         return;
                     }
 
-                    // Verificirajte NOVI token (sessionToken) umjesto starog (finalToken)
-                    const sessionUserFinal = verifySessionToken(newSessionToken || finalToken);
+                    const sessionUserFinal = verifySessionToken(sessionToken);
                     if (!sessionUserFinal || sessionUserFinal.deviceId !== finalFrom) {
                         ws.send(JSON.stringify({ type: "error", message: "Invalid session token." }));
-                        logSessionEvent(newSessionToken || finalToken, finalFrom, 'session_confirmation_error', "Session confirmation failed - invalid session token");
+                        logSessionEvent(sessionToken, finalFrom, 'session_confirmation_error', "Session confirmation failed - invalid session token");
                         return;
                     }
 
                     if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({
-                            type: "control_status",
-                            from: finalFrom,
-                            sessionId: newSessionToken || finalToken, // Koristite novi token
-                            status: "connected"
-                        }));
-                        logSessionEvent(newSessionToken || finalToken, finalFrom, data.type, "Session accepted by device - control session established");
-                        updateSessionActivity(newSessionToken || finalToken);
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionToken, status: "connected" }));
+                        logSessionEvent(sessionToken, finalFrom, data.type, "Session accepted by device - control session established");
+                        updateSessionActivity(sessionToken); //sprint 8
                     }
                     else if (decision === "rejected") {
-                        webAdminWs.send(JSON.stringify({
-                            type: "control_status",
-                            from: finalFrom,
-                            sessionId: newSessionToken || finalToken, // Koristite novi token
-                            status: "failed"
-                        }));
-                        logSessionEvent(newSessionToken || finalToken, finalFrom, data.type, "Session rejected by device - control session failed to establish");
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionToken, status: "failed" }));
+                        logSessionEvent(sessionToken, finalFrom, data.type, "Session rejected by device - control session failed to establish");
 
-                        activeSessions.delete(newSessionToken || finalToken);
-                        sessionActivity.delete(newSessionToken || finalToken);
+                        //sprint 8
+                        activeSessions.delete(sessionToken);
+                        sessionActivity.delete(sessionToken);
                         break;
                     }
 
-                    ws.send(JSON.stringify({
-                        type: "session_confirmed",
-                        message: "Session successfully started between device and Web Admin.",
-                        sessionToken: newSessionToken || finalToken // Vratite novi token uređaju
-                    }));
-                    logSessionEvent(newSessionToken || finalToken, finalFrom, "session_start", "Control session successfully established between device and web admin");
+                    ws.send(JSON.stringify({ type: "session_confirmed", message: "Session successfully started between device and Web Admin." }));
+                    logSessionEvent(sessionToken, finalFrom, "session_start", "Control session successfully established between device and web admin");
 
                     break;
 
