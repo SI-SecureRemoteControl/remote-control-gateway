@@ -17,6 +17,9 @@ async function logSessionEvent(sessionId, deviceId, eventType, description) {
     };
 
     try {
+        // Introduce a tiny wait
+        await new Promise(resolve => setTimeout(resolve, 10));
+
         // Validate input types
         if (typeof sessionId !== 'string' || typeof deviceId !== 'string') {
             throw new Error('sessionId and deviceId must be strings.');
@@ -30,8 +33,8 @@ async function logSessionEvent(sessionId, deviceId, eventType, description) {
             { sessionId, deviceId }, // Match criteria
             {
                 $push: { events: newEvent }, // Push the new event
-                $setOnInsert: { 
-                    sessionId, 
+                $setOnInsert: {
+                    sessionId,
                     deviceId,
                     createdAt: timestamp // Track when the log document was first created
                 },

@@ -462,7 +462,6 @@ async function connectToWebAdmin() {
 
                 default:
                     console.log(`COMM LAYER: Received unhandled message type from Web Admin WS: ${data.type}`);
-                    //logSessionEvent(data.sessionId || 'unknown', data.deviceId || 'unknown', 'unhandled_message', `Unhandled message type from Web Admin: ${data.type}`);
                     break;
             }
 
@@ -611,7 +610,6 @@ async function startServer() {
                         },
                         { returnDocument: 'after' }
                     );
-                    //('system', data.deviceId, 'device_status', `Device status updated to: ${data.status}`); //sprint 8
                     break;
 
                 case "signal":
@@ -677,7 +675,6 @@ async function startServer() {
                     console.log(`\n\nSession request from device ${from} with token ${tokenn}'\n\n`);
 
                     logSessionEvent(tokenn, from, data.type, "Session request initiated by device");
-                    await new Promise(resolve => setTimeout(resolve, 10));
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         console.log("Ja posaljem webu request od androida");
@@ -1007,7 +1004,7 @@ async function startServer() {
                     );
 
                     lastHeartbeat.delete(deviceId);
-                    //logSessionEvent('system', deviceId, 'device_timeout', 'Device marked as inactive due to missing heartbeat'); //sprint 8
+                    logSessionEvent('system', deviceId, 'device_timeout', 'Device marked as inactive due to missing heartbeat');
                     try {
                         ws.close();
                     } catch (err) {
