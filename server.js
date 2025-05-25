@@ -669,9 +669,9 @@ async function startServer() {
                     }
 
                     const sessionToken = jwt.sign(
-                        { d: from, t: Date.now() }, // Minimal payload: 'd' for deviceId, 't' for timestamp
-                        process.env.JWT_SECRET,     // Secret key
-                        { expiresIn: '1d' }         // Token expiration
+                        { deviceId: from }, // Use a minimal payload
+                        process.env.JWT_SECRET, // Ensure the secret matches the one used in verifySessionToken
+                        { expiresIn: '1d' } // Set an appropriate expiration time
                     );
 
                     // Spremite novi token u activeSessions
