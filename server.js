@@ -204,11 +204,11 @@ async function connectToWebAdmin() {
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
                         //sprint 8
-                        logSessionEvent(sessionId, toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
+                        logSessionEvent(sessionId || 'ice_candidate', toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
                         updateSessionActivity(sessionId);
                     } else {
                         console.warn(`COMM LAYER: Target device ${toId} for ${type} not found or not connected.`);
-                        logSessionEvent(sessionId, toId, type, `Failed to relay WebRTC ${type} - device not connected. From: ${fromId}`);
+                        logSessionEvent(sessionId || 'unknown', toId, type, `Failed to relay WebRTC ${type} - device not connected. From: ${fromId}`);
                     }
                     break;
                 }
@@ -761,18 +761,19 @@ async function startServer() {
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
 
-                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                    const isFromAndroid = clients.get(fromId);
+
+                    if (isFromAndroid && webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
-                        logSessionEvent('unknown', fromId, type, `WebRTC ${type} sent from device to web admin`); //sprint 8
+                        break;
                     }
 
                     const target = clients.get(toId);
+
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
-                        logSessionEvent('unknown', fromId, type, `WebRTC ${type} relayed to device ${toId}`); //sprint 8
                     } else {
                         console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
-                        logSessionEvent('unknown', fromId, type, `Failed to relay WebRTC ${type} to ${toId} - target not connected`); //sprint 8
                     }
                     break;
                 }
