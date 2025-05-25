@@ -314,7 +314,7 @@ async function connectToWebAdmin() {
                             recordStarted,
                             message: message || "Web admin started stream recording."
                         }));
-                        logSessionEvent(sessionId, deviceId, "record_stream", `Stream recording started by web admin at ${new Date(recordStarted).toISOString()}`);
+                        logSessionEvent(sessionId, deviceId, "record_stream", `Stream recording started by web admin at ${recordStarted}`);
                         updateSessionActivity(sessionId);
                     } else {
                         logSessionEvent(sessionId, deviceId, "record_stream", "Failed to notify device about stream recording start - device not connected");
@@ -336,7 +336,7 @@ async function connectToWebAdmin() {
                             recordEnded,
                             message: message || "Web admin stopped the recording."
                         }));
-                        logSessionEvent(sessionId, deviceId, "record_stream_ended", `Stream recording ended by web admin at ${new Date(recordEnded).toISOString()}`);
+                        logSessionEvent(sessionId, deviceId, "record_stream_ended", `Stream recording ended by web admin at ${recordEnded}`);
                         updateSessionActivity(sessionId);
                     } else {
                         logSessionEvent(sessionId, deviceId, "record_stream_ended", "Failed to notify device about stream recording end - device not connected");
