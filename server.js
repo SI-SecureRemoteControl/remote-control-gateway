@@ -761,7 +761,7 @@ async function startServer() {
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
 
-                    logSessionEvent('debug', fromId, type, toId);
+                    logSessionEvent('debug', fromId, type, payload);
 
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
