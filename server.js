@@ -184,9 +184,17 @@ async function connectToWebAdmin() {
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
 
+                    let sessionId = null;
+                    for (const [token, deviceId] of activeSessions.entries()) {
+                        if (deviceId === toId) {
+                            sessionId = token;
+                            break;
+                        }
+                    }
+
                     if (!fromId || !toId || !payload) {
                         console.warn(`COMM LAYER: Received invalid signaling message (${type}). Missing fields.`);
-                        logSessionEvent(data.sessionId || 'unknown', fromId || 'unknown', type, `Invalid WebRTC signaling message received from web admin - missing required fields`);
+                        logSessionEvent(sessionId || 'unknown', fromId || 'unknown', type, `Invalid WebRTC signaling message received from web admin - missing required fields`);
                         break;
                     }
 
@@ -196,11 +204,11 @@ async function connectToWebAdmin() {
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
                         //sprint 8
-                        logSessionEvent(data.sessionId || 'ice_candidate', toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
-                        updateSessionActivity(data.sessionId);
+                        logSessionEvent(sessionId || 'ice_candidate', toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
+                        updateSessionActivity(sessionId);
                     } else {
                         console.warn(`COMM LAYER: Target device ${toId} for ${type} not found or not connected.`);
-                        logSessionEvent(data.sessionId || 'unknown', toId, type, `Failed to relay WebRTC ${type} - device not connected. From: ${fromId}`);
+                        logSessionEvent(sessionId || 'unknown', toId, type, `Failed to relay WebRTC ${type} - device not connected. From: ${fromId}`);
                     }
                     break;
                 }
