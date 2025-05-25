@@ -668,12 +668,11 @@ async function startServer() {
                         return;
                     }
 
-                    // Generirajte NOVI token za ovu sesiju
-                    const sessionToken = jwt.sign({
-                        deviceId: from,
-                        sessionType: "screen_share",
-                        createdAt: new Date()
-                    }, process.env.JWT_SECRET, { expiresIn: '1d' });
+                    const sessionToken = jwt.sign(
+                        { d: from, t: Date.now() }, // Minimal payload: 'd' for deviceId, 't' for timestamp
+                        process.env.JWT_SECRET,     // Secret key
+                        { expiresIn: '1d' }         // Token expiration
+                    );
 
                     // Spremite novi token u activeSessions
                     activeSessions.set(sessionToken, from);
