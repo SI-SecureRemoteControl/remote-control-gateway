@@ -71,7 +71,6 @@ async function connectToWebAdmin() {
 
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
-        //logSessionEvent('system', 'comm_layer', 'websocket_connection', 'Successfully connected to Web Admin WS Backend');
     });
 
     webAdminWs.on('message', async (message) => {
@@ -475,13 +474,11 @@ async function connectToWebAdmin() {
 
     webAdminWs.on('close', () => {
         console.log(`!!! COMM LAYER: Web Admin WS Disconnected. Retrying in 5s...`);
-        //logSessionEvent('system', 'comm_layer', 'websocket_disconnect', 'Web Admin WebSocket connection closed - attempting reconnection'); //sprint 8
         setTimeout(connectToWebAdmin, 5000);
     });
 
     webAdminWs.on('error', (err) => {
         console.error('Web Admin WS Error:', err.message);
-        //logSessionEvent('system', 'comm_layer', 'websocket_error', `Web Admin WebSocket error: ${err.message}`); //sprint 8
     });
 }
 
@@ -496,7 +493,6 @@ async function startServer() {
 
     wss.on("connection", (ws) => {
         console.log("New client connected");
-        //logSessionEvent('system', 'comm_layer', 'client_connection', 'New client connected to WebSocket server'); //sprint 8
 
         ws.on("message", async (message) => {
             const data = JSON.parse(message);
@@ -555,7 +551,6 @@ async function startServer() {
                     const token = jwt.sign({ deviceId }, process.env.JWT_SECRET);
 
                     console.log(`[REGISTRATION] Generated JWT for device ${deviceId}: ${token}`);
-                    //logSessionEvent('system', deviceId, 'device_registration', `Device registered successfully - Model: ${data.model || 'N/A'}, OS: ${data.osVersion || 'N/A'}`); //sprint 8
 
                     console.log(`Device ${deviceId} registered.`);
                     ws.send(JSON.stringify({ type: "success", message: `Device registered successfully.`, token }));
@@ -587,7 +582,6 @@ async function startServer() {
                     ws.close();
 
                     console.log(`Device ${data.deviceId} deregistered and removed from database.`);
-                    //logSessionEvent('system', data.deviceId, 'device_deregistration', 'Device deregistered and removed from database successfully'); //sprint 8
 
                     ws.send(JSON.stringify({ type: "success", message: `Device deregistered successfully and removed from database.` }));
                     break;
@@ -644,7 +638,6 @@ async function startServer() {
                     );
                     clients.delete(data.deviceId);
                     console.log(`Device ${data.deviceId} disconnected.`);
-                    logSessionEvent('system', data.deviceId, 'device_disconnect', 'Device disconnected from WebSocket server'); //sprint 8
                     break;
 
                 case "session_request":
@@ -949,7 +942,6 @@ async function startServer() {
 
         ws.on("close", () => {
             console.log("Client disconnected");
-            //logSessionEvent('system', 'unknown', 'client_disconnect', 'Client disconnected from WebSocket server'); //sprint 8
         });
 
     });
@@ -1030,7 +1022,6 @@ async function startServer() {
                     );
 
                     lastHeartbeat.delete(deviceId);
-                    logSessionEvent('system', deviceId, 'device_timeout', 'Device marked as inactive due to missing heartbeat');
                     try {
                         ws.close();
                     } catch (err) {
@@ -1101,7 +1092,6 @@ async function startServer() {
             }
 
             console.log(`Device ${deviceId} deregistered and removed from database.`);
-            //logSessionEvent('system', deviceId, 'device_deregistration_api', 'Device deregistered via API endpoint'); //sprint 8
             res.status(200).json({ message: `Device ${deviceId} deregistered successfully and removed from the database.` });
 
         } catch (error) {
@@ -1270,19 +1260,16 @@ async function startServer() {
     const PORT = process.env.PORT || 8080;
     server.listen(PORT, () => {
         console.log("Server listening on port", PORT);
-        //logSessionEvent('system', 'comm_layer', 'server_start', `Communication layer server started on port ${PORT}`); //sprint 8
     });
 }
 
 // Start the server with DB connection
 startServer().catch((err) => {
     console.error("Error starting server:", err);
-    //logSessionEvent('system', 'comm_layer', 'server_error', `Failed to start server: ${err.message}`); //sprint 8
     process.exit(1);
 });
 
 connectToWebAdmin().catch((err) => {
     console.error("Error connecting to web admin:", err);
-    //logSessionEvent('system', 'comm_layer', 'connection_error', `Failed to connect to web admin: ${err.message}`); //sprint 8
     process.exit(1);
 });
