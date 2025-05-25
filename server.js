@@ -761,20 +761,18 @@ async function startServer() {
                 case "ice-candidate": {
                     const { fromId, toId, payload, type } = data;
 
-                    logSessionEvent('debug', fromId, type, payload);
-
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({ type, fromId, toId, payload }));
-                        logSessionEvent('unknown', fromId, type, `WebRTC ${type} sent from device to web admin`); //sprint 8
+                        //logSessionEvent('unknown', fromId, type, `WebRTC ${type} sent from device to web admin`); //sprint 8
                     }
 
                     const target = clients.get(toId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
-                        logSessionEvent('unknown', fromId, type, `WebRTC ${type} relayed to device ${toId}`); //sprint 8
+                        //logSessionEvent('unknown', fromId, type, `WebRTC ${type} relayed to device ${toId}`); //sprint 8
                     } else {
                         console.warn(`Target ${toId} not connected as device (maybe it's the frontend).`);
-                        logSessionEvent('unknown', fromId, type, `Failed to relay WebRTC ${type} to ${toId} - target not connected`); //sprint 8
+                        //logSessionEvent('unknown', fromId, type, `Failed to relay WebRTC ${type} to ${toId} - target not connected`); //sprint 8
                     }
                     break;
                 }

@@ -18,7 +18,7 @@ async function logSessionEvent(sessionId, deviceId, eventType, description) {
 
     try {
         // Introduce a tiny wait
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         // Validate input types
         if (typeof sessionId !== 'string' || typeof deviceId !== 'string') {
