@@ -204,11 +204,11 @@ async function connectToWebAdmin() {
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({ type, fromId, toId, payload }));
                         //sprint 8
-                        logSessionEvent(sessionId || 'ice_candidate', toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
+                        logSessionEvent(sessionId, toId, type, `WebRTC ${type} relayed from web admin to device successfully`);
                         updateSessionActivity(sessionId);
                     } else {
                         console.warn(`COMM LAYER: Target device ${toId} for ${type} not found or not connected.`);
-                        logSessionEvent(sessionId || 'unknown', toId, type, `Failed to relay WebRTC ${type} - device not connected. From: ${fromId}`);
+                        logSessionEvent(sessionId, toId, type, `Failed to relay WebRTC ${type} - device not connected. From: ${fromId}`);
                     }
                     break;
                 }
