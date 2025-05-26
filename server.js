@@ -976,7 +976,7 @@ async function startServer() {
                     // Notify web admin
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({
-                            type: "session_terminated",
+                            type: "inactive_disconnect",
                             sessionId,
                             deviceId,
                             reason: "inactivity_timeout"
