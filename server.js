@@ -40,7 +40,7 @@ let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm'
 
 const HEARTBEAT_TIMEOUT = 600 * 1000;
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
-const SESSION_INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutes inactivity timeout
+const SESSION_INACTIVITY_TIMEOUT = 1.5 * 60 * 1000; // 1.5 minutes inactivity timeout
 const INACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
 
 let clients = new Map(); // Store connected devices with their WebSocket connections
