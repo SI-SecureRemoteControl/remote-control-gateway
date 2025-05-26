@@ -698,7 +698,7 @@ async function startServer() {
                             message: "Session request forwarded to Web Admin.",
                             sessionToken: sessionToken // Novi token za sesiju
                         }));
-                        logSessionEvent(sessionToken, from, 'session_request_forwarded', 'Session request forwarded to web admin successfully');
+                        //logSessionEvent(sessionToken, from, 'session_request_forwarded', 'Session request forwarded to web admin successfully');
                     } else {
                         ws.send(JSON.stringify({ type: "error", message: "Web Admin not connected." }));
                         logSessionEvent(sessionToken, from, 'session_request_error', "Session request failed - Web Admin not connected");
