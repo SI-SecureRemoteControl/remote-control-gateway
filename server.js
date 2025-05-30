@@ -13,6 +13,38 @@ const { logSessionEvent } = require("./utils/sessionLogger");
 const archiver = require("archiver");
 dotenv.config();
 
+const CONFIG_PATH = path.join(__dirname, 'config.json');   //9.sprint
+
+const defaultConfig = {  //9.sprint
+  inactiveTimeout: 300,      // 5 minutes default    9.sprint
+  maxSessionDuration: 3600   // 60 minutes default   9.sprint
+}; //9.sprint
+
+function ensureConfigFile() {//9.sprint
+  if (!fs.existsSync(CONFIG_PATH)) {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
+    console.log('config.json created with default values.');
+  } else {
+    console.log('config.json already exists.');
+  }
+}//9.sprint
+
+function loadConfig() {//9.sprint
+  try {
+    const raw = fs.readFileSync(CONFIG_PATH);
+    return JSON.parse(raw);
+  } catch (error) {
+    console.error('Failed to load config.json, using default config.', error);
+    return defaultConfig;
+  }
+}//9.sprint
+
+ensureConfigFile();//9.sprint
+let sessionConfig = loadConfig();//9.sprint
+
+const timeout = sessionConfig.inactiveTimeout;  //9.sprint
+const maxDuration = sessionConfig.maxSessionDuration;  //9.sprint
+
 const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
 const approvedSessions = new Map(); // Store approved sessions
 const sessionActivity = new Map(); // Track last activity for each session
@@ -36,10 +68,17 @@ fs.mkdirSync(TEMP_DIR, { recursive: true });
 const upload = multer({ dest: TEMP_DIR });
 
 // Za produkciju
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+//let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');   9.sprint
+if (!process.env.WEBSOCKET_URL) {  //9.sprint
+  console.error('Missing WEBSOCKET_URL in environment variables!'); //9.sprint
+  process.exit(1);  //9.sprint
+} //9.sprint
+let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);  //9.sprint
 
-const HEARTBEAT_TIMEOUT = 600 * 1000;
-const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
+//const HEARTBEAT_TIMEOUT = 600 * 1000;  sklonjeno 9.sprint
+const HEARTBEAT_CHECK_INTERVAL = 30 * 1000; 
+
+const heartbeat_timeout = (sessionConfig.inactiveTimeout || 600) * 1000;
 const SESSION_INACTIVITY_TIMEOUT = 1.5 * 60 * 1000; // 1.5 minutes inactivity timeout
 const INACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
 
@@ -67,8 +106,14 @@ async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
     // webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
-    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+    //webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');   9.sprint
 
+    if (!process.env.WEBSOCKET_URL) {  //9.sprint
+  console.error('Missing WEBSOCKET_URL in environment variables!'); //9.sprint
+  process.exit(1);  //9.sprint
+} //9.sprint
+
+     webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);   //9.sprint
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
     });
@@ -1016,7 +1061,7 @@ async function startServer() {
                     console.log(`No heartbeat received for device ${deviceId}`);
                 }
 
-                if (!lastSeen || now - lastSeen > HEARTBEAT_TIMEOUT) {
+                if (!lastSeen || now - lastSeen > heartbeat_timeout) {
                     console.log(`Device ${deviceId} marked as inactive due to missing heartbeat.`);
 
                     await devicesCollection.findOneAndUpdate(
@@ -1072,6 +1117,43 @@ async function startServer() {
             res.status(500).json({ error: "Failed to fetch session logs" });
         }
     })
+
+    //Configuration related  9.sprint
+    app.get('/config', (req, res) => { //9.sprint
+        res.json(sessionConfig);//9.sprint
+    });
+
+    app.post('/update-config', (req, res) => {//9.sprint
+  const { inactiveTimeout, maxSessionDuration } = req.body;
+
+  // Allowed values in seconds
+  const allowedInactiveTimeouts = [180, 300, 600, 900, 1200]; // 3, 5, 10, 15, 20 min
+  const allowedMaxDurations = [300, 900, 1800, 3600, 7200]; // 5, 15, 30, 60, 120 min
+
+  // Validation
+  if (
+    !allowedInactiveTimeouts.includes(inactiveTimeout) ||
+    !allowedMaxDurations.includes(maxSessionDuration)
+  ) {
+    return res.status(400).json({
+      error: "Invalid config values. Must be one of allowed options."
+    });
+  }
+
+  // Update in-memory config
+  sessionConfig.inactiveTimeout = inactiveTimeout;
+  sessionConfig.maxSessionDuration = maxSessionDuration;
+
+  // Write to file
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(sessionConfig, null, 2));
+    res.status(200).json({ message: "Config updated successfully." });
+  } catch (err) {
+    console.error("Error writing to config.json:", err);
+    res.status(500).json({ error: "Failed to update config file." });
+  }
+});//9.sprint
+
 
     // Deregister device
     app.post("/devices/deregister", async (req, res) => {
