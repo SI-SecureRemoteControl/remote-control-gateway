@@ -43,12 +43,10 @@ function loadConfig() {//9.sprint
 ensureConfigFile();//9.sprint
 let sessionConfig = loadConfig();//9.sprint
 
-const timeout = sessionConfig.inactiveTimeout;  //9.sprint
-const maxDuration = sessionConfig.maxSessionDuration;  //9.sprint
-
 const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
 const approvedSessions = new Map(); // Store approved sessions
 const sessionActivity = new Map(); // Track last activity for each session
+let sessionEndTimes = new Map(); // 9. sprint
 
 const { connectDB } = require("./database/db");
 const { status } = require("migrate-mongo");
@@ -80,8 +78,10 @@ let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);  //9.sprint
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
 const heartbeat_timeout = (sessionConfig.inactiveTimeout || 600) * 1000;
-const SESSION_INACTIVITY_TIMEOUT = 1.5 * 60 * 1000; // 1.5 minutes inactivity timeout
 const INACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
+
+let SESSION_INACTIVITY_TIMEOUT = (sessionConfig.inactiveTimeout || 600) * 1000; // 1.5 minutes inactivity timeout
+let SESSION_MAX_DURATION = (sessionConfig.maxSessionDuration || 1800) * 1000; // 60 minutes max session duration
 
 let clients = new Map(); // Store connected devices with their WebSocket connections
 let lastHeartbeat = new Map(); //---2.task
@@ -783,7 +783,13 @@ async function startServer() {
                     }
 
                     if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionTokenn, status: "connected" }));
+                        const startTime = new Date().toISOString();
+                        const endTime = new Date(Date.now() + SESSION_MAX_DURATION).toISOString();
+
+                        // Zapamti endTime za ovu sesiju
+                        sessionEndTimes.set(sessionTokenn, new Date(endTime).getTime());
+
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionTokenn, status: "connected", startTime, endTime }));
                         logSessionEvent(sessionTokenn, finalFrom, data.type, "Session accepted by device - control session established");
                         updateSessionActivity(sessionTokenn); //sprint 8
                     }
@@ -1001,6 +1007,7 @@ async function startServer() {
     });
 
     // Sprint 8 - Session inactivity check
+    // Sprint 9 - Session expiration check
     setInterval(async () => {
         const now = Date.now();
 
@@ -1046,6 +1053,48 @@ async function startServer() {
                 }
             }
         }
+
+        // Sprint 9 - Provjera za istekle sesije po endTime
+        for (const [sessionId, endTime] of sessionEndTimes.entries()) {
+            if (now > endTime) {
+                const deviceId = activeSessions.get(sessionId);
+                if (deviceId) {
+                    // Send session_expired message to Web Admin
+                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        webAdminWs.send(JSON.stringify({
+                            type: "session_expired",
+                            deviceId,
+                            sessionId,
+                            reason: "Session time has expired."
+                        }));
+                    }
+                    // Send session_expired message to Android device
+                    sendToDevice(deviceId, {
+                        type: "session_expired",
+                        deviceId,
+                        sessionId,
+                        reason: "Session time has expired."
+                    });
+
+                    logSessionEvent(sessionId, deviceId, 'session_expired', 'Session expired due to max duration');
+
+                    // Remove session from maps
+                    activeSessions.delete(sessionId);
+                    sessionActivity.delete(sessionId);
+                    sessionEndTimes.delete(sessionId);
+                    const deviceApprovedPeers = approvedSessions.get(deviceId);
+                    if (deviceApprovedPeers) {
+                        deviceApprovedPeers.delete("web-admin");
+                        if (deviceApprovedPeers.size === 0) {
+                            approvedSessions.delete(deviceId);
+                        }
+                    }
+                } else {
+                    sessionEndTimes.delete(sessionId);
+                }
+            }
+        }
+
     }, INACTIVITY_CHECK_INTERVAL);
 
     // Periodically check for devices that are inactive for too long
@@ -1144,6 +1193,9 @@ async function startServer() {
         // Update in-memory config
         sessionConfig.inactiveTimeout = inactiveTimeout;
         sessionConfig.maxSessionDuration = maxSessionDuration;
+        // Update session inactivity timeout
+        SESSION_INACTIVITY_TIMEOUT = (inactiveTimeout || 600) * 1000;
+        SESSION_MAX_DURATION = (maxSessionDuration || 1800) * 1000;
 
         // Write to file
         try {
