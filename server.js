@@ -13,7 +13,7 @@ const { logSessionEvent } = require("./utils/sessionLogger");
 const archiver = require("archiver");
 dotenv.config();
 
-const RAILWAY_URL = process.env.RAILWAY_URL || "http://localhost:8080";
+const SERVICE_URL = process.env.SERVICE_URL || "http://localhost:8080";
 const CONFIG_PATH = path.join(__dirname, 'config.json');   //9.sprint
 
 const defaultConfig = {  //9.sprint
@@ -1280,7 +1280,7 @@ async function startServer() {
                 zipName = zipFile.originalname.endsWith('.zip') ? zipFile.originalname : `${zipFile.originalname}.zip`;
                 zipPath = path.join(UPLOAD_DIR, zipName);
                 await fs.promises.rename(zipFile.path, zipPath);
-                downloadUrl = `${RAILWAY_URL}/uploads/${zipName}`;
+                downloadUrl = `${SERVICE_URL}/uploads/${zipName}`;
                 logSessionEvent(sessionId, deviceId, 'upload_processing', `Folder upload processed - File: ${zipName}`); //sprint 8
             } else if (uploadType === "files") {
 
@@ -1314,7 +1314,7 @@ async function startServer() {
 
                 await fs.promises.rm(sessionFolder, { recursive: true, force: true });
 
-                downloadUrl = `${RAILWAY_URL}/uploads/${zipName}`;
+                downloadUrl = `${SERVICE_URL}/uploads/${zipName}`;
                 logSessionEvent(sessionId, deviceId, 'upload_processing', `Multiple files upload processed - ${files.length} files zipped as ${zipName}`); //sprint 8
             } else {
                 logSessionEvent(sessionId, deviceId, 'upload_error', `Upload failed - invalid upload type: ${uploadType}`); //sprint 8
@@ -1371,7 +1371,7 @@ async function startServer() {
                 type: "download_response",
                 deviceId,
                 sessionId,
-                downloadUrl: `${RAILWAY_URL}${downloadUrl}`
+                downloadUrl: `${SERVICE_URL}${downloadUrl}`
             });
 
             if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
@@ -1379,7 +1379,7 @@ async function startServer() {
                     type: "download_response",
                     deviceId,
                     sessionId,
-                    downloadUrl: `${RAILWAY_URL}${downloadUrl}`
+                    downloadUrl: `${SERVICE_URL}${downloadUrl}`
                 }));
                 console.log("Message sent to Web Admin successfully.");
                 logSessionEvent(sessionId, deviceId, 'download_response', `Download response sent to web admin - File: ${file.originalname}`); //sprint 8
