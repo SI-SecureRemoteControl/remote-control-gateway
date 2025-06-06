@@ -786,6 +786,8 @@ async function startServer() {
                         const startTime = new Date().toISOString();
                         const endTime = new Date(Date.now() + SESSION_MAX_DURATION).toISOString();
 
+                        console.log(`\n\nSession accepted by device ${finalFrom}. Start time: ${startTime}, End time: ${endTime}\n\n`);
+
                         // Zapamti endTime za ovu sesiju
                         sessionEndTimes.set(sessionTokenn, new Date(endTime).getTime());
 
