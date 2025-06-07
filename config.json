@@ -1,0 +1,4 @@
+{
+  "inactiveTimeout": 600,
+  "maxSessionDuration": 1800
+}

@@ -13,9 +13,40 @@ const { logSessionEvent } = require("./utils/sessionLogger");
 const archiver = require("archiver");
 dotenv.config();
 
+const SERVICE_URL = process.env.SERVICE_URL || "http://localhost:8080";
+const CONFIG_PATH = path.join(__dirname, 'config.json');   //9.sprint
+
+const defaultConfig = {  //9.sprint
+    inactiveTimeout: 300,      // 5 minutes default    9.sprint
+    maxSessionDuration: 3600   // 60 minutes default   9.sprint
+}; //9.sprint
+
+function ensureConfigFile() {//9.sprint
+    if (!fs.existsSync(CONFIG_PATH)) {
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
+        console.log('config.json created with default values.');
+    } else {
+        console.log('config.json already exists.');
+    }
+}//9.sprint
+
+function loadConfig() {//9.sprint
+    try {
+        const raw = fs.readFileSync(CONFIG_PATH);
+        return JSON.parse(raw);
+    } catch (error) {
+        console.error('Failed to load config.json, using default config.', error);
+        return defaultConfig;
+    }
+}//9.sprint
+
+ensureConfigFile();//9.sprint
+let sessionConfig = loadConfig();//9.sprint
+
 const activeSessions = new Map(); // Store sessionId with deviceId before admin approval
 const approvedSessions = new Map(); // Store approved sessions
 const sessionActivity = new Map(); // Track last activity for each session
+let sessionEndTimes = new Map(); // 9. sprint
 
 const { connectDB } = require("./database/db");
 const { status } = require("migrate-mongo");
@@ -36,12 +67,21 @@ fs.mkdirSync(TEMP_DIR, { recursive: true });
 const upload = multer({ dest: TEMP_DIR });
 
 // Za produkciju
-let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+//let webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');   9.sprint
+if (!process.env.WEBSOCKET_URL) {  //9.sprint
+    console.error('Missing WEBSOCKET_URL in environment variables!'); //9.sprint
+    process.exit(1);  //9.sprint
+} //9.sprint
+let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);  //9.sprint
 
-const HEARTBEAT_TIMEOUT = 600 * 1000;
+//const HEARTBEAT_TIMEOUT = 600 * 1000;  sklonjeno 9.sprint
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
-const SESSION_INACTIVITY_TIMEOUT = 1.5 * 60 * 1000; // 1.5 minutes inactivity timeout
+
+const heartbeat_timeout = (sessionConfig.inactiveTimeout || 600) * 1000;
 const INACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
+
+let SESSION_INACTIVITY_TIMEOUT = (sessionConfig.inactiveTimeout || 600) * 1000; // 1.5 minutes inactivity timeout
+let SESSION_MAX_DURATION = (sessionConfig.maxSessionDuration || 1800) * 1000; // 60 minutes max session duration
 
 let clients = new Map(); // Store connected devices with their WebSocket connections
 let lastHeartbeat = new Map(); //---2.task
@@ -67,8 +107,14 @@ async function connectToWebAdmin() {
     console.log((`Connecting to Web Admin at ${webAdminWs.url}`));
 
     // webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
-    webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');
+    //webAdminWs = new WebSocket('wss://backend-wf7e.onrender.com/ws/control/comm');   9.sprint
 
+    if (!process.env.WEBSOCKET_URL) {  //9.sprint
+        console.error('Missing WEBSOCKET_URL in environment variables!'); //9.sprint
+        process.exit(1);  //9.sprint
+    } //9.sprint
+
+    webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);   //9.sprint
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
     });
@@ -302,9 +348,9 @@ async function connectToWebAdmin() {
                 // Sprint 8 - Video recording cases
                 case "record_stream": {
                     const { deviceId, sessionId, recordStarted, message } = data;
-                    
+
                     console.log(`COMM LAYER: Processing record_stream for device ${deviceId}, session ${sessionId}`);
-                    
+
                     const target = clients.get(deviceId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({
@@ -324,9 +370,9 @@ async function connectToWebAdmin() {
 
                 case "record_stream_ended": {
                     const { deviceId, sessionId, recordEnded, message } = data;
-                    
+
                     console.log(`COMM LAYER: Processing record_stream_ended for device ${deviceId}, session ${sessionId}`);
-                    
+
                     const target = clients.get(deviceId);
                     if (target && target.readyState === WebSocket.OPEN) {
                         target.send(JSON.stringify({
@@ -409,7 +455,7 @@ async function connectToWebAdmin() {
                     console.log(`COMM_LAYER: browse_request to device ${deviceId}`);
                     //sprint 8
                     logSessionEvent(sessionId, deviceId, "browse_request", `File browse request sent to device for path: ${path || 'root directory'}`);
-                    updateSessionActivity(sessionId);  
+                    updateSessionActivity(sessionId);
 
                     if (!approvedSessions.has(deviceId)) {
                         approvedSessions.set(deviceId, new Set());
@@ -446,7 +492,7 @@ async function connectToWebAdmin() {
                     const { deviceId, sessionId, status, message, fileName } = data;
 
                     console.log(
-                    `COMM LAYER: download_status  device=${deviceId}  session=${sessionId}  status=${status}  file=${fileName}`
+                        `COMM LAYER: download_status  device=${deviceId}  session=${sessionId}  status=${status}  file=${fileName}`
                     );
 
                     logSessionEvent(sessionId, deviceId, "download_status", `Download status: ${status} - ${message || 'No additional info'} - File: ${fileName || 'N/A'}`);
@@ -737,7 +783,15 @@ async function startServer() {
                     }
 
                     if (decision === "accepted") {
-                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionTokenn, status: "connected" }));
+                        const startTime = new Date().toISOString();
+                        const endTime = new Date(Date.now() + SESSION_MAX_DURATION).toISOString();
+
+                        console.log(`\n\nSession accepted by device ${finalFrom}. Start time: ${startTime}, End time: ${endTime}\n\n`);
+
+                        // Zapamti endTime za ovu sesiju
+                        sessionEndTimes.set(sessionTokenn, new Date(endTime).getTime());
+
+                        webAdminWs.send(JSON.stringify({ type: "control_status", from: finalFrom, sessionId: sessionTokenn, status: "connected", startTime, endTime }));
                         logSessionEvent(sessionTokenn, finalFrom, data.type, "Session accepted by device - control session established");
                         updateSessionActivity(sessionTokenn); //sprint 8
                     }
@@ -882,7 +936,7 @@ async function startServer() {
                 }
 
                 case "upload_status": {
-                    const { deviceId: from, sessionId: tokenn, status, path:paths, fileName, message } = data;
+                    const { deviceId: from, sessionId: tokenn, status, path: paths, fileName, message } = data;
 
                     console.log(`Upload status from device ${from} with token ${tokenn}`);
 
@@ -899,7 +953,7 @@ async function startServer() {
                         logSessionEvent(tokenn, from, 'upload_status_error', 'Upload status failed - invalid session token'); //sprint 8
                         return;
                     }
-                    
+
                     //sprint 8
                     updateSessionActivity(tokenn);
 
@@ -918,16 +972,16 @@ async function startServer() {
                         }));
 
                         if (fileName) {
-                          const target = path.join(UPLOAD_DIR, fileName);
-                           try {
-                             await fs.promises.rm(target, { recursive: true, force: true });
-                             console.log(`Obrisan fajl ${fileName} iz ${UPLOAD_DIR} nakon upload_status.`);
-                             logSessionEvent(tokenn, from, 'file_cleanup', `Upload file cleaned up: ${fileName}`); //sprint 8
-                          } catch (e) {
-                             console.error(`Greška pri brisanju ${target}:`, e.message);
-                             logSessionEvent(tokenn, from, 'file_cleanup_error', `Failed to clean up upload file ${fileName}: ${e.message}`); //sprint 8
-                          }
-                         }
+                            const target = path.join(UPLOAD_DIR, fileName);
+                            try {
+                                await fs.promises.rm(target, { recursive: true, force: true });
+                                console.log(`Obrisan fajl ${fileName} iz ${UPLOAD_DIR} nakon upload_status.`);
+                                logSessionEvent(tokenn, from, 'file_cleanup', `Upload file cleaned up: ${fileName}`); //sprint 8
+                            } catch (e) {
+                                console.error(`Greška pri brisanju ${target}:`, e.message);
+                                logSessionEvent(tokenn, from, 'file_cleanup_error', `Failed to clean up upload file ${fileName}: ${e.message}`); //sprint 8
+                            }
+                        }
 
                         ws.send(JSON.stringify({ type: "info", message: "Upload status forwarded to Web Admin.", sessionId: tokenn }));
                         logSessionEvent(tokenn, from, 'upload_status_forwarded', 'Upload status forwarded to web admin successfully'); //sprint 8
@@ -955,16 +1009,17 @@ async function startServer() {
     });
 
     // Sprint 8 - Session inactivity check
+    // Sprint 9 - Session expiration check
     setInterval(async () => {
         const now = Date.now();
-        
+
         for (const [sessionId, lastActivity] of sessionActivity.entries()) {
             if (now - lastActivity > SESSION_INACTIVITY_TIMEOUT) {
                 const deviceId = activeSessions.get(sessionId);
-                
+
                 if (deviceId) {
                     console.log(`Session ${sessionId} for device ${deviceId} inactive for too long. Terminating...`);
-                    
+
                     // Send inactive disconnect message to device
                     sendToDevice(deviceId, {
                         type: "inactive_disconnect",
@@ -972,7 +1027,7 @@ async function startServer() {
                         sessionId,
                         status: "The session has been terminated due to inactivity."
                     });
-                    
+
                     // Notify web admin
                     if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
                         webAdminWs.send(JSON.stringify({
@@ -982,14 +1037,14 @@ async function startServer() {
                             reason: "inactivity_timeout"
                         }));
                     }
-                    
+
                     // Log the event
                     logSessionEvent(sessionId, deviceId, 'inactive_disconnect', 'Session terminated due to inactivity (3+ minutes without activity)');
-                    
+
                     // Clean up
                     activeSessions.delete(sessionId);
                     sessionActivity.delete(sessionId);
-                    
+
                     const deviceApprovedPeers = approvedSessions.get(deviceId);
                     if (deviceApprovedPeers) {
                         deviceApprovedPeers.delete("web-admin");
@@ -1000,6 +1055,48 @@ async function startServer() {
                 }
             }
         }
+
+        // Sprint 9 - Provjera za istekle sesije po endTime
+        for (const [sessionId, endTime] of sessionEndTimes.entries()) {
+            if (now > endTime) {
+                const deviceId = activeSessions.get(sessionId);
+                if (deviceId) {
+                    // Send session_expired message to Web Admin
+                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        webAdminWs.send(JSON.stringify({
+                            type: "session_expired",
+                            deviceId,
+                            sessionId,
+                            reason: "Session time has expired."
+                        }));
+                    }
+                    // Send session_expired message to Android device
+                    sendToDevice(deviceId, {
+                        type: "session_expired",
+                        deviceId,
+                        sessionId,
+                        reason: "Session time has expired."
+                    });
+
+                    logSessionEvent(sessionId, deviceId, 'session_expired', 'Session expired due to max duration');
+
+                    // Remove session from maps
+                    activeSessions.delete(sessionId);
+                    sessionActivity.delete(sessionId);
+                    sessionEndTimes.delete(sessionId);
+                    const deviceApprovedPeers = approvedSessions.get(deviceId);
+                    if (deviceApprovedPeers) {
+                        deviceApprovedPeers.delete("web-admin");
+                        if (deviceApprovedPeers.size === 0) {
+                            approvedSessions.delete(deviceId);
+                        }
+                    }
+                } else {
+                    sessionEndTimes.delete(sessionId);
+                }
+            }
+        }
+
     }, INACTIVITY_CHECK_INTERVAL);
 
     // Periodically check for devices that are inactive for too long
@@ -1016,7 +1113,7 @@ async function startServer() {
                     console.log(`No heartbeat received for device ${deviceId}`);
                 }
 
-                if (!lastSeen || now - lastSeen > HEARTBEAT_TIMEOUT) {
+                if (!lastSeen || now - lastSeen > heartbeat_timeout) {
                     console.log(`Device ${deviceId} marked as inactive due to missing heartbeat.`);
 
                     await devicesCollection.findOneAndUpdate(
@@ -1072,6 +1169,46 @@ async function startServer() {
             res.status(500).json({ error: "Failed to fetch session logs" });
         }
     })
+
+    //Configuration related  9.sprint
+    app.get('/config', (req, res) => { //9.sprint
+        res.json(sessionConfig);//9.sprint
+    });
+
+    app.post('/update-config', (req, res) => {//9.sprint
+        const { inactiveTimeout, maxSessionDuration } = req.body;
+
+        // Allowed values in seconds
+        const allowedInactiveTimeouts = [180, 300, 600, 900, 1200]; // 3, 5, 10, 15, 20 min
+        const allowedMaxDurations = [300, 900, 1800, 3600, 7200]; // 5, 15, 30, 60, 120 min
+
+        // Validation
+        if (
+            !allowedInactiveTimeouts.includes(inactiveTimeout) ||
+            !allowedMaxDurations.includes(maxSessionDuration)
+        ) {
+            return res.status(400).json({
+                error: "Invalid config values. Must be one of allowed options."
+            });
+        }
+
+        // Update in-memory config
+        sessionConfig.inactiveTimeout = inactiveTimeout;
+        sessionConfig.maxSessionDuration = maxSessionDuration;
+        // Update session inactivity timeout
+        SESSION_INACTIVITY_TIMEOUT = (inactiveTimeout || 600) * 1000;
+        SESSION_MAX_DURATION = (maxSessionDuration || 1800) * 1000;
+
+        // Write to file
+        try {
+            fs.writeFileSync(CONFIG_PATH, JSON.stringify(sessionConfig, null, 2));
+            res.status(200).json({ message: "Config updated successfully." });
+        } catch (err) {
+            console.error("Error writing to config.json:", err);
+            res.status(500).json({ error: "Failed to update config file." });
+        }
+    });//9.sprint
+
 
     // Deregister device
     app.post("/devices/deregister", async (req, res) => {
@@ -1145,14 +1282,14 @@ async function startServer() {
                 zipName = zipFile.originalname.endsWith('.zip') ? zipFile.originalname : `${zipFile.originalname}.zip`;
                 zipPath = path.join(UPLOAD_DIR, zipName);
                 await fs.promises.rename(zipFile.path, zipPath);
-                downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+                downloadUrl = `${SERVICE_URL}/uploads/${zipName}`;
                 logSessionEvent(sessionId, deviceId, 'upload_processing', `Folder upload processed - File: ${zipName}`); //sprint 8
             } else if (uploadType === "files") {
-            
-            const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
-            const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
-            await fs.promises.mkdir(sessionFolder, { recursive: true });
-                
+
+                const safeSessionId = sessionId.replace(/[^\w\-]/g, "_");
+                const sessionFolder = path.join(UPLOAD_DIR, `session-${safeSessionId}`);
+                await fs.promises.mkdir(sessionFolder, { recursive: true });
+
                 for (const f of files) {
                     const relativePath = f.originalname;
                     const dest = path.join(sessionFolder, cleanBase, relativePath);
@@ -1179,7 +1316,7 @@ async function startServer() {
 
                 await fs.promises.rm(sessionFolder, { recursive: true, force: true });
 
-                downloadUrl = `https://remote-control-gateway-production.up.railway.app/uploads/${zipName}`;
+                downloadUrl = `${SERVICE_URL}/uploads/${zipName}`;
                 logSessionEvent(sessionId, deviceId, 'upload_processing', `Multiple files upload processed - ${files.length} files zipped as ${zipName}`); //sprint 8
             } else {
                 logSessionEvent(sessionId, deviceId, 'upload_error', `Upload failed - invalid upload type: ${uploadType}`); //sprint 8
@@ -1195,7 +1332,7 @@ async function startServer() {
             });
 
             //sprint 8
-            logSessionEvent(sessionId, deviceId, 'upload_complete', `Upload completed successfully - Download URL sent to device: ${downloadUrl}`); 
+            logSessionEvent(sessionId, deviceId, 'upload_complete', `Upload completed successfully - Download URL sent to device: ${downloadUrl}`);
             updateSessionActivity(sessionId);
 
             return res.json({ message: "Upload complete. Android notified.", downloadUrl });
@@ -1236,7 +1373,7 @@ async function startServer() {
                 type: "download_response",
                 deviceId,
                 sessionId,
-                downloadUrl: `https://remote-control-gateway-production.up.railway.app${downloadUrl}`
+                downloadUrl: `${SERVICE_URL}${downloadUrl}`
             });
 
             if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
@@ -1244,7 +1381,7 @@ async function startServer() {
                     type: "download_response",
                     deviceId,
                     sessionId,
-                    downloadUrl: `https://remote-control-gateway-production.up.railway.app${downloadUrl}`
+                    downloadUrl: `${SERVICE_URL}${downloadUrl}`
                 }));
                 console.log("Message sent to Web Admin successfully.");
                 logSessionEvent(sessionId, deviceId, 'download_response', `Download response sent to web admin - File: ${file.originalname}`); //sprint 8
