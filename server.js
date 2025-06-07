@@ -11,6 +11,8 @@ const cors = require("cors");
 const dotenv = require('dotenv');
 const { logSessionEvent } = require("./utils/sessionLogger");
 const archiver = require("archiver");
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 dotenv.config();
 
 const SERVICE_URL = process.env.SERVICE_URL || "http://localhost:8080";
@@ -53,6 +55,8 @@ const { status } = require("migrate-mongo");
 const app = express();
 app.use(cors());
 app.use(express.json());
+// Swagger route
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 
 //sprint 7
@@ -1140,10 +1144,47 @@ async function startServer() {
     }, HEARTBEAT_CHECK_INTERVAL);
 
     // Status endpoint to check server status
+/**
+ * @swagger
+ * /status:
+ *   get:
+ *     summary: Get service status
+ *     description: Returns current server status and number of connected clients.
+ *     responses:
+ *       200:
+ *         description: Service is running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: running
+ *                 connectedClients:
+ *                   type: integer
+ *                   example: 3
+ */
     app.get("/status", (req, res) => {
         res.json({ status: "Remote Control Gateway is running", connectedClients: clients.size });
     });
 
+/**
+ * @swagger
+ * /devices/active:
+ *   get:
+ *     summary: Get all active devices
+ *     description: Returns a list of currently active devices.
+ *     responses:
+ *       200:
+ *         description: List of active devices
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ */
     app.get("/devices/active", async (req, res) => {
         try {
             const activeDevices = await devicesCollection.find({ status: "active" }).toArray();
@@ -1155,6 +1196,29 @@ async function startServer() {
     });
 
     // Endpoint to get session logs for a specific device
+/**
+ * @swagger
+ * /session/logs/{deviceId}:
+ *   get:
+ *     summary: Get session logs for a device
+ *     description: Retrieves all session logs associated with the specified device ID.
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Unique ID of the device
+ *     responses:
+ *       200:
+ *         description: Session logs retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ */
     app.get("/session/logs/:deviceId", async (req, res) => {
         const { deviceId } = req.params;
 
@@ -1171,10 +1235,56 @@ async function startServer() {
     })
 
     //Configuration related  9.sprint
+    /**
+ * @swagger
+ * /config:
+ *   get:
+ *     summary: Get current session configuration
+ *     description: Returns the current server session timeout and max duration values.
+ *     responses:
+ *       200:
+ *         description: Current configuration returned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 inactiveTimeout:
+ *                   type: integer
+ *                   example: 300000
+ *                 maxSessionDuration:
+ *                   type: integer
+ *                   example: 600000
+ */
     app.get('/config', (req, res) => { //9.sprint
         res.json(sessionConfig);//9.sprint
     });
 
+    /**
+ * @swagger
+ * /update-config:
+ *   post:
+ *     summary: Update session configuration
+ *     description: Updates the session timeout and maximum duration values.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               inactiveTimeout:
+ *                 type: integer
+ *                 example: 300000
+ *               maxSessionDuration:
+ *                 type: integer
+ *                 example: 600000
+ *     responses:
+ *       200:
+ *         description: Config updated successfully
+ *       400:
+ *         description: Invalid config values
+ */
     app.post('/update-config', (req, res) => {//9.sprint
         const { inactiveTimeout, maxSessionDuration } = req.body;
 
@@ -1210,7 +1320,38 @@ async function startServer() {
     });//9.sprint
 
 
-    // Deregister device
+    /**
+ * @swagger
+ * /devices/deregister:
+ *   post:
+ *     summary: Deregister a device
+ *     description: Removes a registered device if the correct deregistration key is provided.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deviceId
+ *               - deregistrationKey
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 example: "device123"
+ *               deregistrationKey:
+ *                 type: string
+ *                 example: "key456"
+ *     responses:
+ *       200:
+ *         description: Device deregistered successfully
+ *       400:
+ *         description: Missing fields or invalid deregistration key
+ *       404:
+ *         description: Device not found
+ *       500:
+ *         description: Internal server error
+ */
     app.post("/devices/deregister", async (req, res) => {
         const { deviceId, deregistrationKey } = req.body;
 
@@ -1245,7 +1386,35 @@ async function startServer() {
         }
     });
 
-    //temporary for removing test sessions
+    /**
+ * @swagger
+ * /removeSessions:
+ *   post:
+ *     summary: Remove active or approved session manually
+ *     description: Removes a session from internal session tracking by token and deviceId.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: "session_token_abc"
+ *               deviceId:
+ *                 type: string
+ *                 example: "device123"
+ *     responses:
+ *       200:
+ *         description: Session removed successfully
+ *       400:
+ *         description: Missing token
+ *       404:
+ *         description: Session not found
+ */
     app.post('/removeSessions', (req, res) => {
         const { token, deviceId } = req.body;
 
@@ -1264,6 +1433,50 @@ async function startServer() {
         }
     });
 
+    /**
+ * @swagger
+ * /api/upload:
+ *   post:
+ *     summary: Upload files or a zipped folder
+ *     description: Accepts file(s) or folder ZIP upload from device and stores it for session.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deviceId
+ *               - sessionId
+ *               - path
+ *               - uploadType
+ *               - files[]
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 example: "device123"
+ *               sessionId:
+ *                 type: string
+ *                 example: "session456"
+ *               path:
+ *                 type: string
+ *                 example: "/Documents/"
+ *               uploadType:
+ *                 type: string
+ *                 enum: [folder, files]
+ *               files[]:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *     responses:
+ *       200:
+ *         description: Upload completed successfully
+ *       400:
+ *         description: Missing fields or invalid upload type
+ *       500:
+ *         description: Internal server error
+ */
     app.post("/api/upload", upload.array("files[]"), async (req, res) => {
         try {
             const { deviceId, sessionId, path: basePath, uploadType } = req.body;
@@ -1354,6 +1567,40 @@ async function startServer() {
         })
     );
 
+    /**
+ * @swagger
+ * /api/download:
+ *   post:
+ *     summary: Upload a file to be downloaded by the device
+ *     description: Stores a file on the server and sends a download notification to the device via WebSocket.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deviceId
+ *               - sessionId
+ *               - file
+ *             properties:
+ *               deviceId:
+ *                 type: string
+ *                 example: "device123"
+ *               sessionId:
+ *                 type: string
+ *                 example: "session789"
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: File stored and Web Admin notified
+ *       400:
+ *         description: Missing required fields
+ *       500:
+ *         description: Internal server error
+ */
     app.post("/api/download", upload.single("file"), async (req, res) => {
         try {
             const { deviceId, sessionId } = req.body;
