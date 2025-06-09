@@ -2,8 +2,8 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
-//const https = require("https");
-const http = require('http');
+const https = require("https");
+//const http = require('http');
 const WebSocket = require("ws");
 const jwt = require("jsonwebtoken");
 const { verifySessionToken } = require("./utils/authSession");
@@ -15,7 +15,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./swagger');
 dotenv.config();
 
-const SERVICE_URL = process.env.SERVICE_URL || "http://localhost:8080";
+const SERVICE_URL = process.env.SERVICE_URL || "https://localhost:8080";
 const CONFIG_PATH = path.join(__dirname, 'config.json');   //9.sprint
 
 const defaultConfig = {  //9.sprint
@@ -76,7 +76,9 @@ if (!process.env.WEBSOCKET_URL) {  //9.sprint
     console.error('Missing WEBSOCKET_URL in environment variables!'); //9.sprint
     process.exit(1);  //9.sprint
 } //9.sprint
-let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);  //9.sprint
+let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL, {
+    rejectUnauthorized: false
+});  //9.sprint
 
 //const HEARTBEAT_TIMEOUT = 600 * 1000;  sklonjeno 9.sprint
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
@@ -118,7 +120,9 @@ async function connectToWebAdmin() {
         process.exit(1);  //9.sprint
     } //9.sprint
 
-    webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);   //9.sprint
+    webAdminWs = new WebSocket(process.env.WEBSOCKET_URL, {
+        rejectUnauthorized: false
+    });   //9.sprint
     webAdminWs.on('open', () => {
         console.log('>>> COMM LAYER: Successfully connected to Web Admin WS (Backend)!');
     });
@@ -545,8 +549,37 @@ async function startServer() {
     const db = await connectDB();
     const devicesCollection = db.collection('devices');
 
-    const server = http.createServer(app);
+    // Load HTTPS credentials
+    const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(__dirname, 'key.pem');
+    const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(__dirname, 'cert.pem');
+    let credentials = {};
+    try {
+        credentials = {
+            key: fs.readFileSync(HTTPS_KEY_PATH),
+            cert: fs.readFileSync(HTTPS_CERT_PATH)
+        };
+        console.log('Loaded HTTPS credentials.');
+    } catch (err) {
+        console.warn('Could not load HTTPS credentials:', err.message);
+    }
 
+    // Only start HTTPS server if credentials are available, otherwise start HTTP server
+    let server;
+    if (credentials.key && credentials.cert) {
+        const HTTPS_PORT = process.env.HTTPS_PORT || 8080;
+        server = https.createServer(credentials, app);
+        server.listen(HTTPS_PORT, () => {
+            console.log(`HTTPS server running on port ${HTTPS_PORT}`);
+        });
+    } else {
+        const HTTP_PORT = process.env.HTTP_PORT || 8080;
+        server = require('http').createServer(app);
+        server.listen(HTTP_PORT, () => {
+            console.log(`HTTP server running on port ${HTTP_PORT}`);
+        });
+    }
+
+    // Use the single server for WebSocket
     const wss = new WebSocket.Server({ server });
 
     wss.on("connection", (ws) => {
@@ -1649,16 +1682,21 @@ async function startServer() {
         }
     });
 
-    const PORT = process.env.PORT || 8080;
-    server.listen(PORT, () => {
-        console.log("Server listening on port", PORT);
-    });
+    // Set a more permissive Content-Security-Policy for development
+app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy',
+        "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *; font-src 'self' data:;");
+    next();
+});
 }
 
-// Start the server with DB connection
-startServer().catch((err) => {
-    console.error("Error starting server:", err);
-    process.exit(1);
+app.use(cors({ origin: '*', credentials: true }));
+// CORS configuration for HTTPS/HTTP
+
+
+// Start the server
+startServer().catch(err => {
+    console.error('Error starting server:', err);
 });
 
 connectToWebAdmin().catch((err) => {
