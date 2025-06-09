@@ -549,34 +549,42 @@ async function startServer() {
     const db = await connectDB();
     const devicesCollection = db.collection('devices');
 
-    // Load HTTPS credentials
-    const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(__dirname, 'key.pem');
-    const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(__dirname, 'cert.pem');
-    let credentials = {};
-    try {
-        credentials = {
-            key: fs.readFileSync(HTTPS_KEY_PATH),
-            cert: fs.readFileSync(HTTPS_CERT_PATH)
-        };
-        console.log('Loaded HTTPS credentials.');
-    } catch (err) {
-        console.warn('Could not load HTTPS credentials:', err.message);
-    }
-
-    // Only start HTTPS server if credentials are available, otherwise start HTTP server
     let server;
-    if (credentials.key && credentials.cert) {
-        const HTTPS_PORT = process.env.HTTPS_PORT || 8080;
-        server = https.createServer(credentials, app);
-        server.listen(HTTPS_PORT, () => {
-            console.log(`HTTPS server running on port ${HTTPS_PORT}`);
-        });
-    } else {
-        const HTTP_PORT = process.env.HTTP_PORT || 8080;
+    if (process.env.RAILWAY === 'true') {
+        // Railway: HTTP only
+        const HTTP_PORT = process.env.HTTP_PORT || process.env.PORT || 8080;
         server = require('http').createServer(app);
         server.listen(HTTP_PORT, () => {
-            console.log(`HTTP server running on port ${HTTP_PORT}`);
+            console.log(`[RAILWAY] HTTP server running on port ${HTTP_PORT}`);
         });
+    } else {
+        // Local/dev: Prefer HTTPS, fallback to HTTP if certs missing
+        const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(__dirname, 'key.pem');
+        const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(__dirname, 'cert.pem');
+        let credentials = {};
+        let useHttps = false;
+        try {
+            credentials = {
+                key: fs.readFileSync(HTTPS_KEY_PATH),
+                cert: fs.readFileSync(HTTPS_CERT_PATH)
+            };
+            useHttps = true;
+        } catch (err) {
+            console.warn('Could not load HTTPS credentials, falling back to HTTP:', err.message);
+        }
+        if (useHttps) {
+            const HTTPS_PORT = process.env.HTTPS_PORT || process.env.PORT || 8080;
+            server = https.createServer(credentials, app);
+            server.listen(HTTPS_PORT, () => {
+                console.log(`HTTPS server running on port ${HTTPS_PORT}`);
+            });
+        } else {
+            const HTTP_PORT = process.env.HTTP_PORT || process.env.PORT || 8080;
+            server = require('http').createServer(app);
+            server.listen(HTTP_PORT, () => {
+                console.log(`[FALLBACK] HTTP server running on port ${HTTP_PORT}`);
+            });
+        }
     }
 
     // Use the single server for WebSocket
