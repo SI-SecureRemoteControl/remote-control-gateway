@@ -698,6 +698,51 @@ async function startServer() {
                     console.log(`Device ${data.deviceId} disconnected.`);
                     break;
 
+                case "terminate_session": {
+                    const { deviceId: senderId, to: receiverId, token } = data;
+
+                   // const allowedPeers = approvedSessions.get(senderId);            
+
+                    console.log(`COMM LAYER: Processing terminate_session for ${data.token}`);
+
+                    let deviceIdForTermination = activeSessions.get(token);
+
+                    if (!deviceIdForTermination) {
+                        console.warn(`COMM LAYER: Received termination for session ${token}, but couldn't map it back to a deviceId in activeSessions.`);
+                        logSessionEvent(token, 'unknown', "session_end", `Session termination received but device mapping lost. Reason: ${reason || 'No reason provided'}`);
+                        activeSessions.delete(token);
+                        sessionActivity.delete(token); //sprint 8
+                        return;
+                    }
+
+                    console.log(`COMM LAYER: Found deviceId ${deviceId} for terminated session ${token}.`);
+                    logSessionEvent(token, deviceId, "session_end", `Session terminated by web admin.`);
+
+                    // Cleanup Logic
+                    activeSessions.delete(token);
+                    sessionActivity.delete(deviceId); //sprint 8
+                    console.log(`COMM LAYER: Deleted session ${token} from activeSessions due to termination.`);
+
+                    const deviceApprovedPeers = approvedSessions.get(deviceId);
+                    if (deviceApprovedPeers) {
+                        const deleted = deviceApprovedPeers.delete("web-admin");
+                        if (deleted) console.log(`COMM LAYER: Removed 'web-admin' peer from approvedSessions for device ${deviceIdForTermination}.`);
+
+                        if (deviceApprovedPeers.size === 0) {
+                            approvedSessions.delete(token);
+                            console.log(`COMM LAYER: Removed device ${token} from approvedSessions as no peers remain.`);
+                        }
+                        const target = clients.get(receiverId);
+                    if (target) {
+                        target.send(JSON.stringify({ type: "terminate_session", from: senderId, to: receiverId }));
+                        //logSessionEvent('unknown', senderId, 'signal_relay', `WebRTC signal relayed to ${receiverId} successfully`); //sprint 8
+                    } else {
+                        //logSessionEvent('unknown', senderId, 'signal_error', `Failed to relay signal to ${receiverId} - target device not connected`); //sprint 8
+                    }
+                    }
+                    
+                    break;
+                }
                 case "session_request":
                     const { from, token: existingToken } = data;
 
