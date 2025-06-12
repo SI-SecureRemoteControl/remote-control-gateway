@@ -713,8 +713,8 @@ async function startServer() {
                     }
 
                     // Cleanup Logic: remove session for this device
-                    activeSessions.delete(token);
-                    sessionActivity.delete(token);
+                    //activeSessions.delete(token);
+                    //sessionActivity.delete(token);
                     const deviceApprovedPeers = approvedSessions.get(deviceId);
                     if (deviceApprovedPeers) {
                         deviceApprovedPeers.delete("web-admin");
@@ -729,6 +729,9 @@ async function startServer() {
                     if (target) {
                         target.send(JSON.stringify({ type: "terminate_session", sessionId: token, deviceId, to: receiverId }));
                     }
+
+                    activeSessions.delete(token);
+                    sessionActivity.delete(token);
                     break;
                 }
                 case "session_request":
