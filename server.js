@@ -81,7 +81,7 @@ let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);  //9.sprint
 //const HEARTBEAT_TIMEOUT = 600 * 1000;  sklonjeno 9.sprint
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
-const heartbeat_timeout = (sessionConfig.inactiveTimeout || 600) * 1000;
+const heartbeat_timeout = 30 * 1000;
 const INACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
 
 let SESSION_INACTIVITY_TIMEOUT = (sessionConfig.inactiveTimeout || 600) * 1000; // 1.5 minutes inactivity timeout
