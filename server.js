@@ -699,7 +699,7 @@ async function startServer() {
                     break;
 
                 case "terminate_session": {
-                    const { deviceId: senderId, to: receiverId, token } = data;
+                    const { deviceId: deviceId, to: receiverId, token: token } = data;
 
                    // const allowedPeers = approvedSessions.get(senderId);            
 
@@ -709,7 +709,7 @@ async function startServer() {
 
                     if (!deviceIdForTermination) {
                         console.warn(`COMM LAYER: Received termination for session ${token}, but couldn't map it back to a deviceId in activeSessions.`);
-                        logSessionEvent(token, 'unknown', "session_end", `Session termination received but device mapping lost. Reason: ${reason || 'No reason provided'}`);
+                        logSessionEvent(token, 'unknown', "session_end", `Session termination received but device mapping lost.`);
                         activeSessions.delete(token);
                         sessionActivity.delete(token); //sprint 8
                         return;
@@ -734,7 +734,7 @@ async function startServer() {
                         }
                         const target = clients.get(receiverId);
                     if (target) {
-                        target.send(JSON.stringify({ type: "terminate_session", from: senderId, to: receiverId }));
+                        target.send(JSON.stringify({ type: "terminate_session", sessionId: token, deviceId: senderId, to: receiverId }));
                         //logSessionEvent('unknown', senderId, 'signal_relay', `WebRTC signal relayed to ${receiverId} successfully`); //sprint 8
                     } else {
                         //logSessionEvent('unknown', senderId, 'signal_error', `Failed to relay signal to ${receiverId} - target device not connected`); //sprint 8
