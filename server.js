@@ -707,14 +707,6 @@ async function startServer() {
 
                     let deviceIdForTermination = activeSessions.get(token);
 
-                    if (!deviceIdForTermination) {
-                        console.warn(`COMM LAYER: Received termination for session ${token}, but couldn't map it back to a deviceId in activeSessions.`);
-                        logSessionEvent(token, 'unknown', "session_end", `Session termination received but device mapping lost.`);
-                        activeSessions.delete(token);
-                        sessionActivity.delete(token); //sprint 8
-                        return;
-                    }
-
                     console.log(`COMM LAYER: Found deviceId ${deviceId} for terminated session ${token}.`);
                     logSessionEvent(token, deviceId, "session_end", `Session terminated by web admin.`);
 
