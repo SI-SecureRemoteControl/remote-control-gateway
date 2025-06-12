@@ -81,7 +81,7 @@ let webAdminWs = new WebSocket(process.env.WEBSOCKET_URL);  //9.sprint
 //const HEARTBEAT_TIMEOUT = 600 * 1000;  sklonjeno 9.sprint
 const HEARTBEAT_CHECK_INTERVAL = 30 * 1000;
 
-const heartbeat_timeout = (sessionConfig.inactiveTimeout || 600) * 1000;
+const heartbeat_timeout = 30 * 1000;
 const INACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
 
 let SESSION_INACTIVITY_TIMEOUT = (sessionConfig.inactiveTimeout || 600) * 1000; // 1.5 minutes inactivity timeout
@@ -698,6 +698,42 @@ async function startServer() {
                     console.log(`Device ${data.deviceId} disconnected.`);
                     break;
 
+                case "terminate_session": {
+                    const { deviceId, to: receiverId, token } = data;
+                    console.log(`COMM LAYER: Processing terminate_session for ${token}`);
+
+                    // Notify the web admin (web app) via WebSocket
+                    if (webAdminWs && webAdminWs.readyState === WebSocket.OPEN) {
+                        webAdminWs.send(JSON.stringify({
+                            type: "terminate_session",
+                            sessionId: token,
+                            deviceId: deviceId,
+                            reason: "terminated_by_device"
+                        }));
+                    }
+
+                    // Cleanup Logic: remove session for this device
+                    //activeSessions.delete(token);
+                    //sessionActivity.delete(token);
+                    const deviceApprovedPeers = approvedSessions.get(deviceId);
+                    if (deviceApprovedPeers) {
+                        deviceApprovedPeers.delete("web-admin");
+                        if (deviceApprovedPeers.size === 0) {
+                            approvedSessions.delete(deviceId);
+                        }
+                    }
+                    logSessionEvent(token, deviceId, "session_end", `Session terminated by device and removed from session tracking.`);
+
+                    // Optionally, notify the device itself (if needed)
+                    const target = clients.get(receiverId);
+                    if (target) {
+                        target.send(JSON.stringify({ type: "terminate_session", sessionId: token, deviceId, to: receiverId }));
+                    }
+
+                    activeSessions.delete(token);
+                    sessionActivity.delete(token);
+                    break;
+                }
                 case "session_request":
                     const { from, token: existingToken } = data;
 
